@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Users, UserPlus, Edit, Trash2, Save, X } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -131,18 +132,44 @@ export default function UserManagementContent() {
     },
   });
 
+  const editUserSchema = z.object({
+    name: z.string().min(1, "Name is required"),
+    email: z.string().email("Please enter a valid email"),
+    role: z.enum(["staff", "manager", "administrasi"], {
+      errorMap: () => ({ message: "Please select a role" })
+    }),
+    storeId: z.coerce.number().min(1, "Please select a store"),
+    salary: z.coerce.number().min(0, "Salary must be a positive number").optional(),
+  });
+
+  const editForm = useForm<Omit<CreateUserData, 'password'>>({
+    resolver: zodResolver(editUserSchema),
+  });
+
   const onCreateUser = (data: CreateUserData) => {
     createUserMutation.mutate(data);
   };
 
   const handleEditUser = (userData: User) => {
     setEditingUser(userData);
+    editForm.reset({
+      name: userData.name,
+      email: userData.email,
+      role: userData.role as any,
+      storeId: userData.storeId,
+      salary: userData.salary || 0,
+    });
   };
 
-  const handleUpdateUser = (data: Partial<CreateUserData>) => {
+  const handleUpdateUser = (data: Omit<CreateUserData, 'password'>) => {
     if (editingUser) {
       updateUserMutation.mutate({ id: editingUser.id, data });
     }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingUser(null);
+    editForm.reset();
   };
 
   const handleDeleteUser = (id: string) => {
@@ -395,7 +422,135 @@ export default function UserManagementContent() {
         </TabsContent>
       </Tabs>
 
-      {/* Edit User Modal would go here */}
+      {/* Edit User Modal */}
+      <Dialog open={!!editingUser} onOpenChange={(open) => !open && handleCancelEdit()}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit className="h-5 w-5" />
+              Edit Employee: {editingUser?.name}
+            </DialogTitle>
+          </DialogHeader>
+          
+          {editingUser && (
+            <Form {...editForm}>
+              <form onSubmit={editForm.handleSubmit(handleUpdateUser)} className="space-y-4">
+                <FormField
+                  control={editForm.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Full Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Enter employee name" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={editForm.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input type="email" placeholder="Enter email address" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={editForm.control}
+                  name="role"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Role</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select role" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="staff">Karyawan (Staff)</SelectItem>
+                          <SelectItem value="manager">Manager</SelectItem>
+                          <SelectItem value="administrasi">Keuangan (Administrator)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={editForm.control}
+                  name="storeId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Store Assignment</FormLabel>
+                      <Select onValueChange={(value) => field.onChange(parseInt(value))} value={field.value?.toString()}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select store" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="1">Main Store</SelectItem>
+                          <SelectItem value="2">Branch Store</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={editForm.control}
+                  name="salary"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Salary (IDR)</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          placeholder="Enter salary amount" 
+                          {...field}
+                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="flex gap-2">
+                  <Button 
+                    type="submit" 
+                    className="flex-1" 
+                    disabled={updateUserMutation.isPending}
+                  >
+                    <Save className="h-4 w-4 mr-2" />
+                    {updateUserMutation.isPending ? "Updating..." : "Update Employee"}
+                  </Button>
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={handleCancelEdit}
+                    disabled={updateUserMutation.isPending}
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            </Form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
