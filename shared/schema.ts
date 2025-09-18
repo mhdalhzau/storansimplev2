@@ -166,9 +166,10 @@ export const piutang = pgTable("piutang", {
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   createdAt: true,
+  salary: true, // Omit salary to properly override it
 }).extend({
   storeIds: z.array(z.number()).min(1, "Please select at least one store"),
-  // Convert salary from number to string to match decimal field type
+  // Accept number from frontend and convert to string for decimal field
   salary: z.coerce.number().min(0, "Salary must be a positive number").optional().transform((val) => val?.toString()),
 });
 
