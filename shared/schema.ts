@@ -267,3 +267,9 @@ export type Customer = typeof customers.$inferSelect;
 export type InsertCustomer = z.infer<typeof insertCustomerSchema>;
 export type Piutang = typeof piutang.$inferSelect;
 export type InsertPiutang = z.infer<typeof insertPiutangSchema>;
+
+// Extended types with related data
+export type AttendanceWithEmployee = Attendance & {
+  employeeName: string;
+  employeeRole: string;
+};

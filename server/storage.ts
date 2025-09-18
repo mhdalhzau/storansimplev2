@@ -7,6 +7,7 @@ import {
   type InsertUserStore,
   type Attendance,
   type InsertAttendance,
+  type AttendanceWithEmployee,
   type Sales,
   type InsertSales,
   type Cashflow,
@@ -57,6 +58,7 @@ export interface IStorage {
   // Attendance methods
   getAttendance(id: string): Promise<Attendance | undefined>;
   getAttendanceByStore(storeId: number, date?: string): Promise<Attendance[]>;
+  getAttendanceByStoreWithEmployees(storeId: number, date?: string): Promise<AttendanceWithEmployee[]>;
   getAttendanceByUser(userId: string): Promise<Attendance[]>;
   createAttendance(attendance: InsertAttendance): Promise<Attendance>;
   updateAttendanceStatus(id: string, status: string): Promise<Attendance | undefined>;
@@ -293,7 +295,7 @@ export class MemStorage implements IStorage {
         id: randomUUID(),
         userId,
         storeId,
-        createdAt: new Date().toISOString()
+        createdAt: new Date()
       };
       this.userStores.set(assignment.id, assignment);
     }
@@ -373,6 +375,24 @@ export class MemStorage implements IStorage {
     );
   }
 
+  async getAttendanceByStoreWithEmployees(storeId: number, date?: string): Promise<AttendanceWithEmployee[]> {
+    const attendanceRecords = await this.getAttendanceByStore(storeId, date);
+    const attendanceWithEmployees: AttendanceWithEmployee[] = [];
+
+    for (const record of attendanceRecords) {
+      const user = await this.getUser(record.userId);
+      if (user) {
+        attendanceWithEmployees.push({
+          ...record,
+          employeeName: user.name,
+          employeeRole: user.role,
+        });
+      }
+    }
+
+    return attendanceWithEmployees;
+  }
+
   async getAttendanceByUser(userId: string): Promise<Attendance[]> {
     return Array.from(this.attendanceRecords.values()).filter(
       (record) => record.userId === userId
@@ -387,8 +407,11 @@ export class MemStorage implements IStorage {
       date: insertAttendance.date ?? null,
       checkIn: insertAttendance.checkIn ?? null,
       checkOut: insertAttendance.checkOut ?? null,
-      breakDuration: insertAttendance.breakDuration ?? null,
-      overtime: insertAttendance.overtime ?? null,
+      shift: insertAttendance.shift ?? null,
+      latenessMinutes: insertAttendance.latenessMinutes ?? 0,
+      overtimeMinutes: insertAttendance.overtimeMinutes ?? 0,
+      breakDuration: insertAttendance.breakDuration ?? 0,
+      overtime: insertAttendance.overtime ?? "0",
       notes: insertAttendance.notes ?? null,
       status: "pending",
       createdAt: new Date() 

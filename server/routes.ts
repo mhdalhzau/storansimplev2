@@ -134,7 +134,12 @@ export function registerRoutes(app: Express): Server {
           return res.status(403).json({ message: "You don't have access to this store" });
         }
         
-        records = await storage.getAttendanceByStore(targetStoreId, date as string);
+        // Use method with employee names for managers and administrators
+        if (['manager', 'administrasi'].includes(req.user.role)) {
+          records = await storage.getAttendanceByStoreWithEmployees(targetStoreId, date as string);
+        } else {
+          records = await storage.getAttendanceByStore(targetStoreId, date as string);
+        }
       }
       
       res.json(records);

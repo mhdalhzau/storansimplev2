@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { type Attendance } from "@shared/schema";
+import { type Attendance, type AttendanceWithEmployee } from "@shared/schema";
 import { Clock, CheckCircle2 } from "lucide-react";
 
 const attendanceSchema = z.object({
@@ -26,10 +26,16 @@ const attendanceSchema = z.object({
 
 type AttendanceData = z.infer<typeof attendanceSchema>;
 
+// Helper function to check if record has employee info
+function hasEmployeeInfo(record: Attendance | AttendanceWithEmployee): record is AttendanceWithEmployee {
+  return 'employeeName' in record;
+}
+
 export default function AttendanceContent() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [nameFilter, setNameFilter] = useState("");
 
   const form = useForm<AttendanceData>({
     resolver: zodResolver(attendanceSchema),
@@ -42,7 +48,7 @@ export default function AttendanceContent() {
     },
   });
 
-  const { data: attendanceRecords, isLoading } = useQuery<Attendance[]>({
+  const { data: attendanceRecords, isLoading } = useQuery<(Attendance | AttendanceWithEmployee)[]>({
     queryKey: ["/api/attendance", { date: selectedDate }],
   });
 
@@ -94,6 +100,18 @@ export default function AttendanceContent() {
   };
 
   const isStaff = user?.role === "staff";
+
+  // Filter attendance records by name
+  const filteredAttendanceRecords = attendanceRecords?.filter(record => {
+    if (!nameFilter) return true;
+    
+    if (hasEmployeeInfo(record)) {
+      return record.employeeName.toLowerCase().includes(nameFilter.toLowerCase());
+    } else {
+      // For staff viewing their own records, filter by userId
+      return record.userId.toLowerCase().includes(nameFilter.toLowerCase());
+    }
+  }) || [];
 
   return (
     <div className="space-y-6">
@@ -226,6 +244,13 @@ export default function AttendanceContent() {
               <CardTitle>Staff Attendance</CardTitle>
               <div className="flex gap-3">
                 <Input
+                  placeholder="Filter by employee name..."
+                  value={nameFilter}
+                  onChange={(e) => setNameFilter(e.target.value)}
+                  className="w-64"
+                  data-testid="input-name-filter"
+                />
+                <Input
                   type="date"
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
@@ -238,7 +263,7 @@ export default function AttendanceContent() {
           <CardContent>
             {isLoading ? (
               <div className="text-center py-8">Loading attendance records...</div>
-            ) : attendanceRecords && attendanceRecords.length > 0 ? (
+            ) : filteredAttendanceRecords && filteredAttendanceRecords.length > 0 ? (
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
@@ -252,16 +277,26 @@ export default function AttendanceContent() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {attendanceRecords.map((record) => (
+                    {filteredAttendanceRecords.map((record) => (
                       <TableRow key={record.id}>
                         <TableCell>
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 bg-secondary rounded-full flex items-center justify-center">
                               <span className="text-sm font-medium">
-                                {record.userId.slice(0, 2).toUpperCase()}
+                                {hasEmployeeInfo(record) 
+                                  ? record.employeeName.slice(0, 2).toUpperCase()
+                                  : record.userId.slice(0, 2).toUpperCase()
+                                }
                               </span>
                             </div>
-                            <span className="font-medium">{record.userId}</span>
+                            <div>
+                              <span className="font-medium">
+                                {hasEmployeeInfo(record) ? record.employeeName : record.userId}
+                              </span>
+                              {hasEmployeeInfo(record) && (
+                                <div className="text-xs text-muted-foreground">{record.employeeRole}</div>
+                              )}
+                            </div>
                           </div>
                         </TableCell>
                         <TableCell>{record.checkIn || "—"}</TableCell>
