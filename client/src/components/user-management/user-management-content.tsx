@@ -166,7 +166,7 @@ export default function UserManagementContent() {
     role: z.enum(["staff", "manager", "administrasi"], {
       errorMap: () => ({ message: "Please select a role" })
     }),
-    storeId: z.coerce.number().min(1, "Please select a store"),
+    storeIds: z.array(z.number()).min(1, "Please select at least one store"),
     salary: z.coerce.number().min(0, "Salary must be a positive number").optional(),
   });
 
@@ -287,7 +287,12 @@ export default function UserManagementContent() {
                           {userData.role}
                         </Badge>
                       </TableCell>
-                      <TableCell>{getStoreName(userData.storeId)}</TableCell>
+                      <TableCell>
+                        {userData.stores && userData.stores.length > 0
+                          ? userData.stores.map(store => store.name).join(", ")
+                          : "-"
+                        }
+                      </TableCell>
                       <TableCell>
                         {userData.salary ? formatCurrency(userData.salary) : "-"}
                       </TableCell>
