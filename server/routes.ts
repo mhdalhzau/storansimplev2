@@ -74,7 +74,15 @@ export function registerRoutes(app: Express): Server {
       }
       
       const { storeId, startDate, endDate } = req.query;
-      const targetStoreId = storeId ? parseInt(storeId as string) : req.user.storeId;
+      let targetStoreId;
+      
+      if (req.user.role === 'manager') {
+        // Managers can only see their assigned store unless specifically requested
+        targetStoreId = storeId ? parseInt(storeId as string) : req.user.storeId;
+      } else {
+        // Administrators can access any store
+        targetStoreId = storeId ? parseInt(storeId as string) : 1; // Default to store 1 for demo
+      }
       
       const sales = await storage.getSalesByStore(
         targetStoreId!, 
@@ -143,7 +151,18 @@ export function registerRoutes(app: Express): Server {
         return res.status(403).json({ message: "Forbidden" });
       }
       
-      const cashflow = await storage.getCashflowByStore(req.user.storeId!);
+      let cashflow;
+      if (req.user.role === 'manager') {
+        // Managers see cashflow for their assigned store
+        cashflow = await storage.getCashflowByStore(req.user.storeId!);
+      } else {
+        // Administrators can see all cashflow - we'll need to implement getAllCashflow
+        // For now, use store 1 as default for demo
+        const { storeId } = req.query;
+        const targetStoreId = storeId ? parseInt(storeId as string) : 1;
+        cashflow = await storage.getCashflowByStore(targetStoreId);
+      }
+      
       res.json(cashflow);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -233,10 +252,17 @@ export function registerRoutes(app: Express): Server {
       if (!req.user) return res.status(401).json({ message: "Unauthorized" });
       
       let proposals;
-      if (req.user.role === 'manager') {
+      if (req.user.role === 'staff') {
+        // Staff can only see proposals from their own store
+        proposals = await storage.getProposalsByStore(req.user.storeId!);
+      } else if (req.user.role === 'manager') {
+        // Managers can see proposals from their assigned store
+        proposals = await storage.getProposalsByStore(req.user.storeId!);
+      } else if (req.user.role === 'administrasi') {
+        // Administrators can see all proposals across all stores
         proposals = await storage.getAllProposals();
       } else {
-        proposals = await storage.getProposalsByStore(req.user.storeId!);
+        return res.status(403).json({ message: "Forbidden" });
       }
       
       res.json(proposals);
@@ -247,7 +273,7 @@ export function registerRoutes(app: Express): Server {
 
   app.patch("/api/proposal/:id/approve", async (req, res) => {
     try {
-      if (!req.user || req.user.role !== 'manager') {
+      if (!req.user || !['manager', 'administrasi'].includes(req.user.role)) {
         return res.status(403).json({ message: "Forbidden" });
       }
       
@@ -262,7 +288,7 @@ export function registerRoutes(app: Express): Server {
 
   app.patch("/api/proposal/:id/reject", async (req, res) => {
     try {
-      if (!req.user || req.user.role !== 'manager') {
+      if (!req.user || !['manager', 'administrasi'].includes(req.user.role)) {
         return res.status(403).json({ message: "Forbidden" });
       }
       

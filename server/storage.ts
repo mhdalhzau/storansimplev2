@@ -20,6 +20,7 @@ import { randomUUID } from "crypto";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import { Store as SessionStore } from "express-session";
+import { hashPassword } from "./auth";
 
 const MemoryStore = createMemoryStore(session);
 
@@ -121,6 +122,33 @@ export class MemStorage implements IStorage {
     
     this.stores.set(1, store1);
     this.stores.set(2, store2);
+
+    // Create default accounts
+    // Manager account
+    const managerPassword = await hashPassword("manager123");
+    const manager: User = {
+      id: randomUUID(),
+      email: "manager@spbu.com",
+      password: managerPassword,
+      name: "SPBU Manager",
+      role: "manager",
+      storeId: 1,
+      createdAt: new Date()
+    };
+    this.users.set(manager.id, manager);
+
+    // Administrator account
+    const adminPassword = await hashPassword("admin123");
+    const admin: User = {
+      id: randomUUID(),
+      email: "admin@spbu.com",
+      password: adminPassword,
+      name: "SPBU Administrator",
+      role: "administrasi",
+      storeId: null,
+      createdAt: new Date()
+    };
+    this.users.set(admin.id, admin);
   }
 
   // User methods
