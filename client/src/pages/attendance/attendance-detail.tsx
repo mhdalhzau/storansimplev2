@@ -166,32 +166,44 @@ export default function AttendanceDetailPage() {
     const baseDate = '2024-01-01';
     const nextDate = '2024-01-02';
     
-    // Calculate lateness
-    const checkInTime = new Date(`${baseDate} ${checkIn}`);
-    const expectedStart = new Date(`${baseDate} ${shiftTime.start}`);
-    const latenessMinutes = checkInTime > expectedStart ? 
-      Math.max(0, Math.floor((checkInTime.getTime() - expectedStart.getTime()) / (1000 * 60))) : 0;
-    
-    // Calculate overtime with cross-midnight handling
-    let overtimeMinutes = 0;
-    
     if (shiftTime.crossMidnight) {
       // Night shift: 22:00 -> 07:00 (next day)
-      const checkOutTime = new Date(`${checkOut < '12:00' ? nextDate : baseDate} ${checkOut}`);
+      const expectedStart = new Date(`${baseDate} ${shiftTime.start}`);
       const expectedEnd = new Date(`${nextDate} ${shiftTime.end}`);
       
-      overtimeMinutes = checkOutTime > expectedEnd ? 
-        Math.floor((checkOutTime.getTime() - expectedEnd.getTime()) / (1000 * 60)) : 0;
+      // For night shift, times before 22:00 are considered next day
+      const checkInDate = checkIn < '22:00' ? nextDate : baseDate;
+      const checkOutDate = checkOut < '22:00' ? nextDate : baseDate;
+      
+      const checkInTime = new Date(`${checkInDate} ${checkIn}`);
+      const checkOutTime = new Date(`${checkOutDate} ${checkOut}`);
+      
+      // Calculate lateness
+      const latenessMinutes = checkInTime > expectedStart ? 
+        Math.max(0, Math.floor((checkInTime.getTime() - expectedStart.getTime()) / (1000 * 60))) : 0;
+      
+      // Calculate overtime
+      const overtimeMinutes = checkOutTime > expectedEnd ? 
+        Math.max(0, Math.floor((checkOutTime.getTime() - expectedEnd.getTime()) / (1000 * 60))) : 0;
+      
+      return { latenessMinutes, overtimeMinutes };
     } else {
       // Day shifts: same day calculation
+      const checkInTime = new Date(`${baseDate} ${checkIn}`);
       const checkOutTime = new Date(`${baseDate} ${checkOut}`);
+      const expectedStart = new Date(`${baseDate} ${shiftTime.start}`);
       const expectedEnd = new Date(`${baseDate} ${shiftTime.end}`);
       
-      overtimeMinutes = checkOutTime > expectedEnd ? 
-        Math.floor((checkOutTime.getTime() - expectedEnd.getTime()) / (1000 * 60)) : 0;
+      // Calculate lateness
+      const latenessMinutes = checkInTime > expectedStart ? 
+        Math.max(0, Math.floor((checkInTime.getTime() - expectedStart.getTime()) / (1000 * 60))) : 0;
+      
+      // Calculate overtime
+      const overtimeMinutes = checkOutTime > expectedEnd ? 
+        Math.max(0, Math.floor((checkOutTime.getTime() - expectedEnd.getTime()) / (1000 * 60))) : 0;
+      
+      return { latenessMinutes, overtimeMinutes };
     }
-    
-    return { latenessMinutes, overtimeMinutes };
   };
 
   // Export to CSV
