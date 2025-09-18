@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { pythonApiRequest } from "@/lib/queryClient";
 
 interface ExpenseItem {
   id: string;
@@ -141,7 +141,7 @@ export default function StaffPage() {
   // Mutation untuk save data ke Python API
   const saveSetoranMutation = useMutation({
     mutationFn: async (data: any) => {
-      const response = await apiRequest('POST', '/api/setoran', data);
+      const response = await pythonApiRequest('POST', '/api/setoran', data);
       return response.json();
     },
     onSuccess: () => {

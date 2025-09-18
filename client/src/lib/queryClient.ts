@@ -8,21 +8,38 @@ async function throwIfResNotOk(res: Response) {
 }
 
 // Base URL untuk Python API
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const PYTHON_API_BASE_URL = import.meta.env.VITE_PYTHON_API_BASE_URL || 'http://localhost:8000';
 
 export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  // Jika URL sudah full URL, gunakan langsung, jika tidak tambahkan base URL
-  const fullUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
+  const res = await fetch(url, {
+    method,
+    headers: data ? { "Content-Type": "application/json" } : {},
+    body: data ? JSON.stringify(data) : undefined,
+    credentials: "include",
+  });
+
+  await throwIfResNotOk(res);
+  return res;
+}
+
+// Helper khusus untuk Python API
+export async function pythonApiRequest(
+  method: string,
+  endpoint: string,
+  data?: unknown | undefined,
+): Promise<Response> {
+  const fullUrl = `${PYTHON_API_BASE_URL}${endpoint}`;
   
   const res = await fetch(fullUrl, {
     method,
     headers: data ? { "Content-Type": "application/json" } : {},
     body: data ? JSON.stringify(data) : undefined,
-    credentials: "include",
+    // Disable credentials untuk Python API to avoid CORS issues
+    credentials: "omit",
   });
 
   await throwIfResNotOk(res);
@@ -36,10 +53,8 @@ export const getQueryFn: <T>(options: {
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
     const url = queryKey.join("/") as string;
-    // Jika URL sudah full URL, gunakan langsung, jika tidak tambahkan base URL  
-    const fullUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
     
-    const res = await fetch(fullUrl, {
+    const res = await fetch(url, {
       credentials: "include",
     });
 
