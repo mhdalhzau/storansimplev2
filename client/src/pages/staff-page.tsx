@@ -33,12 +33,16 @@ export default function StaffPage() {
   const [income, setIncome] = useState<IncomeItem[]>([]);
 
   // Calculations
-  const totalLiter = nomorAkhir - nomorAwal;
+  const totalLiter = Math.max(0, nomorAkhir - nomorAwal); // Prevent negative liter
   const totalSetoran = totalLiter * 11500; // Total = Total Liter × 11500
-  const cashSetoran = totalSetoran - qrisSetoran; // Cash = Total - QRIS
-  const totalExpenses = expenses.reduce((sum, item) => sum + item.amount, 0);
-  const totalIncome = income.reduce((sum, item) => sum + item.amount, 0);
-  const totalKeseluruhan = totalSetoran + totalIncome - totalExpenses;
+  const cashSetoran = Math.max(0, totalSetoran - qrisSetoran); // Cash = Total - QRIS, prevent negative
+  
+  // Only count valid items (with description and amount > 0)
+  const validExpenses = expenses.filter(item => item.description.trim() && item.amount > 0);
+  const validIncome = income.filter(item => item.description.trim() && item.amount > 0);
+  const totalExpenses = validExpenses.reduce((sum, item) => sum + item.amount, 0);
+  const totalIncome = validIncome.reduce((sum, item) => sum + item.amount, 0);
+  const totalKeseluruhan = cashSetoran + totalIncome - totalExpenses; // Cash + Pemasukan - Pengeluaran
 
   useEffect(() => {
     const today = new Date();
@@ -52,6 +56,18 @@ export default function StaffPage() {
   }, []);
 
   const addExpenseItem = () => {
+    // Validasi - cek apakah semua item sudah diisi
+    const hasEmptyFields = expenses.some(item => !item.description.trim() || item.amount <= 0);
+    
+    if (hasEmptyFields) {
+      toast({
+        title: "Data Belum Lengkap",
+        description: "Lengkapi semua field pengeluaran sebelum menambah item baru",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const newItem: ExpenseItem = {
       id: Date.now().toString(),
       description: "",
@@ -71,6 +87,18 @@ export default function StaffPage() {
   };
 
   const addIncomeItem = () => {
+    // Validasi - cek apakah semua item sudah diisi
+    const hasEmptyFields = income.some(item => !item.description.trim() || item.amount <= 0);
+    
+    if (hasEmptyFields) {
+      toast({
+        title: "Data Belum Lengkap",
+        description: "Lengkapi semua field pemasukan sebelum menambah item baru",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const newItem: IncomeItem = {
       id: Date.now().toString(),
       description: "",
@@ -120,15 +148,15 @@ QRIS: ${formatCurrency(qrisSetoran)}
 Total: ${formatCurrency(totalSetoran)}
 
 💸 Pengeluaran (PU):
-${expenses.map(item => `- ${item.description}: ${formatCurrency(item.amount)}`).join('\n')}
+${validExpenses.map(item => `- ${item.description}: ${formatCurrency(item.amount)}`).join('\n')}
 Total Pengeluaran: ${formatCurrency(totalExpenses)}
 
 💵 Pemasukan (PU):
-${income.map(item => `- ${item.description}: ${formatCurrency(item.amount)}`).join('\n')}
+${validIncome.map(item => `- ${item.description}: ${formatCurrency(item.amount)}`).join('\n')}
 Total Pemasukan: ${formatCurrency(totalIncome)}
 
 💼 Total Keseluruhan: ${formatCurrency(totalKeseluruhan)}
-Setoran: ${formatCurrency(totalSetoran)} + Pemasukan: ${formatCurrency(totalIncome)} - Pengeluaran: ${formatCurrency(totalExpenses)}
+Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)} - Pengeluaran: ${formatCurrency(totalExpenses)}
     `.trim();
 
     navigator.clipboard.writeText(reportText);
@@ -251,7 +279,7 @@ Setoran: ${formatCurrency(totalSetoran)} + Pemasukan: ${formatCurrency(totalInco
                 <div className="flex items-center gap-2">
                   <span>Rp</span>
                   <Input
-                    value={cashSetoran || "0"}
+                    value={formatCurrency(cashSetoran).replace('Rp', '').trim()}
                     readOnly
                     className="bg-gray-50 cursor-default"
                     data-testid="display-cash-setoran"
@@ -264,8 +292,9 @@ Setoran: ${formatCurrency(totalSetoran)} + Pemasukan: ${formatCurrency(totalInco
                   <span>Rp</span>
                   <Input
                     type="number"
+                    min="0"
                     value={qrisSetoran || ""}
-                    onChange={(e) => setQrisSetoran(Number(e.target.value) || 0)}
+                    onChange={(e) => setQrisSetoran(Math.max(0, Number(e.target.value) || 0))}
                     data-testid="input-qris-setoran"
                   />
                 </div>
@@ -276,7 +305,7 @@ Setoran: ${formatCurrency(totalSetoran)} + Pemasukan: ${formatCurrency(totalInco
                   <span>Rp</span>
                   <div className="relative">
                     <Input
-                      value={totalSetoran || "0"}
+                      value={formatCurrency(totalSetoran).replace('Rp', '').trim()}
                       readOnly
                       className="pr-10 bg-green-50 cursor-default"
                       data-testid="display-total-setoran"
@@ -321,8 +350,9 @@ Setoran: ${formatCurrency(totalSetoran)} + Pemasukan: ${formatCurrency(totalInco
                     <span>Rp</span>
                     <Input
                       type="number"
+                      min="0"
                       value={item.amount || ""}
-                      onChange={(e) => updateExpenseItem(item.id, 'amount', Number(e.target.value) || 0)}
+                      onChange={(e) => updateExpenseItem(item.id, 'amount', Math.max(0, Number(e.target.value) || 0))}
                       className="w-32"
                     />
                   </div>
@@ -374,8 +404,9 @@ Setoran: ${formatCurrency(totalSetoran)} + Pemasukan: ${formatCurrency(totalInco
                     <span>Rp</span>
                     <Input
                       type="number"
+                      min="0"
                       value={item.amount || ""}
-                      onChange={(e) => updateIncomeItem(item.id, 'amount', Number(e.target.value) || 0)}
+                      onChange={(e) => updateIncomeItem(item.id, 'amount', Math.max(0, Number(e.target.value) || 0))}
                       className="w-32"
                     />
                   </div>
@@ -405,7 +436,7 @@ Setoran: ${formatCurrency(totalSetoran)} + Pemasukan: ${formatCurrency(totalInco
                 💼 Total Keseluruhan: {formatCurrency(totalKeseluruhan)}
               </Label>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Setoran: {formatCurrency(totalSetoran)} + Pemasukan: {formatCurrency(totalIncome)} - Pengeluaran: {formatCurrency(totalExpenses)}
+                Cash: {formatCurrency(cashSetoran)} + Pemasukan: {formatCurrency(totalIncome)} - Pengeluaran: {formatCurrency(totalExpenses)}
               </p>
             </div>
           </CardContent>
