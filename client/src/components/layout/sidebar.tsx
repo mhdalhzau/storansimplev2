@@ -11,6 +11,7 @@ import {
   Timer, 
   Users,
   Store,
+  UserCheck,
   LogOut 
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -39,6 +40,12 @@ const menuItems: MenuItem[] = [
     label: "Attendance",
     icon: <Clock className="w-5 h-5" />,
     allowedRoles: ["staff", "manager", "administrasi"],
+  },
+  {
+    id: "staff-management",
+    label: "Staff Management",
+    icon: <UserCheck className="w-5 h-5" />,
+    allowedRoles: ["manager", "administrasi"],
   },
   {
     id: "sales",

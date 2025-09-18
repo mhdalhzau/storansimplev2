@@ -11,6 +11,7 @@ import ProposalContent from "@/components/proposal/proposal-content";
 import OvertimeContent from "@/components/overtime/overtime-content";
 import UserManagementContent from "@/components/user-management/user-management-content";
 import StoreManagementContent from "@/components/store-management/store-management-content";
+import EmployeeListPage from "@/pages/attendance/employee-list";
 
 export default function HomePage() {
   const { user } = useAuth();
@@ -24,6 +25,8 @@ export default function HomePage() {
         return <DashboardContent />;
       case "attendance":
         return <AttendanceContent />;
+      case "staff-management":
+        return <EmployeeListPage />;
       case "sales":
         return <SalesContent />;
       case "cashflow":
