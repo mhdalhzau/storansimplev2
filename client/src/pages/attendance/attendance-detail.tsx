@@ -93,6 +93,10 @@ export default function AttendanceDetailPage() {
     onSuccess: () => {
       toast({ title: "Berhasil", description: "Data absensi berhasil disimpan" });
       setHasChanges(false);
+      // Invalidate and refetch the data
+      queryClient.invalidateQueries({
+        queryKey: [`/api/employees/${employeeId}/attendance/${year}/${month}`]
+      });
       refetch();
     },
     onError: (error: any) => {
@@ -146,30 +150,46 @@ export default function AttendanceDetailPage() {
     setHasChanges(true);
   };
 
-  // Calculate lateness and overtime
+  // Calculate lateness and overtime with proper cross-midnight handling
   const calculateTimeMetrics = (checkIn: string, checkOut: string, shift: string) => {
     if (!checkIn || !checkOut || !shift) return { latenessMinutes: 0, overtimeMinutes: 0 };
     
     const shiftTimes = {
-      pagi: { start: '08:00', end: '17:00' },
-      siang: { start: '12:00', end: '21:00' },
-      malam: { start: '22:00', end: '07:00' }
+      pagi: { start: '08:00', end: '17:00', crossMidnight: false },
+      siang: { start: '12:00', end: '21:00', crossMidnight: false },
+      malam: { start: '22:00', end: '07:00', crossMidnight: true }
     };
     
     const shiftTime = shiftTimes[shift as keyof typeof shiftTimes];
     if (!shiftTime) return { latenessMinutes: 0, overtimeMinutes: 0 };
     
+    const baseDate = '2024-01-01';
+    const nextDate = '2024-01-02';
+    
     // Calculate lateness
-    const checkInTime = new Date(`2024-01-01 ${checkIn}`);
-    const expectedStart = new Date(`2024-01-01 ${shiftTime.start}`);
+    const checkInTime = new Date(`${baseDate} ${checkIn}`);
+    const expectedStart = new Date(`${baseDate} ${shiftTime.start}`);
     const latenessMinutes = checkInTime > expectedStart ? 
       Math.max(0, Math.floor((checkInTime.getTime() - expectedStart.getTime()) / (1000 * 60))) : 0;
     
-    // Calculate overtime (simplified - assumes same day for now)
-    const checkOutTime = new Date(`2024-01-01 ${checkOut}`);
-    const expectedEnd = new Date(`2024-01-01 ${shiftTime.end}`);
-    const overtimeMinutes = checkOutTime > expectedEnd ? 
-      Math.floor((checkOutTime.getTime() - expectedEnd.getTime()) / (1000 * 60)) : 0;
+    // Calculate overtime with cross-midnight handling
+    let overtimeMinutes = 0;
+    
+    if (shiftTime.crossMidnight) {
+      // Night shift: 22:00 -> 07:00 (next day)
+      const checkOutTime = new Date(`${checkOut < '12:00' ? nextDate : baseDate} ${checkOut}`);
+      const expectedEnd = new Date(`${nextDate} ${shiftTime.end}`);
+      
+      overtimeMinutes = checkOutTime > expectedEnd ? 
+        Math.floor((checkOutTime.getTime() - expectedEnd.getTime()) / (1000 * 60)) : 0;
+    } else {
+      // Day shifts: same day calculation
+      const checkOutTime = new Date(`${baseDate} ${checkOut}`);
+      const expectedEnd = new Date(`${baseDate} ${shiftTime.end}`);
+      
+      overtimeMinutes = checkOutTime > expectedEnd ? 
+        Math.floor((checkOutTime.getTime() - expectedEnd.getTime()) / (1000 * 60)) : 0;
+    }
     
     return { latenessMinutes, overtimeMinutes };
   };
