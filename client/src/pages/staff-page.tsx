@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Plus, Minus, Copy, AlertTriangle } from "lucide-react";
+import { Plus, Minus, Copy, AlertTriangle, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 
 interface ExpenseItem {
   id: string;
@@ -136,6 +138,38 @@ export default function StaffPage() {
   const { toast } = useToast();
   const [currentDate, setCurrentDate] = useState("");
   
+  // Mutation untuk save data ke Python API
+  const saveSetoranMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const response = await apiRequest('POST', '/api/setoran', data);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "✅ Berhasil Disimpan",
+        description: "Data setoran harian berhasil disimpan ke database",
+        variant: "default",
+      });
+      
+      // Reset form setelah berhasil save
+      setEmployeeName("");
+      setJamMasuk("");
+      setJamKeluar("");
+      setNomorAwal(0);
+      setNomorAkhir(0);
+      setQrisSetoran(0);
+      setExpenses([]);
+      setIncome([]);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "❌ Gagal Menyimpan",
+        description: `Error: ${error.message}`,
+        variant: "destructive",
+      });
+    },
+  });
+  
   // Form data
   const [employeeName, setEmployeeName] = useState("");
   const [jamMasuk, setJamMasuk] = useState("");
@@ -253,6 +287,61 @@ export default function StaffPage() {
 
   const formatNumber = (amount: number) => {
     return new Intl.NumberFormat('id-ID').format(amount);
+  };
+
+  const saveToDatabase = async () => {
+    // Validasi form
+    if (!employeeName.trim()) {
+      toast({
+        title: "❌ Data Tidak Lengkap",
+        description: "Nama karyawan harus diisi",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (!jamMasuk || !jamKeluar) {
+      toast({
+        title: "❌ Data Tidak Lengkap", 
+        description: "Jam masuk dan jam keluar harus diisi",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (nomorAkhir <= nomorAwal) {
+      toast({
+        title: "❌ Data Tidak Valid",
+        description: "Nomor akhir harus lebih besar dari nomor awal",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Cek jika ada incomplete items
+    if (hasIncompleteExpenses || hasIncompleteIncome) {
+      toast({
+        title: "❌ Data Tidak Lengkap",
+        description: "Harap lengkapi atau hapus item yang belum diisi dengan sempurna",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Prepare data untuk API
+    const setoranData = {
+      employee_name: employeeName,
+      jam_masuk: jamMasuk,
+      jam_keluar: jamKeluar,
+      nomor_awal: nomorAwal,
+      nomor_akhir: nomorAkhir,
+      qris_setoran: qrisSetoran,
+      expenses: validExpenses,
+      income: validIncome
+    };
+    
+    // Save ke database
+    saveSetoranMutation.mutate(setoranData);
   };
 
   const copyToClipboard = () => {
@@ -704,16 +793,30 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
           </CardContent>
         </Card>
 
-        {/* Copy Button */}
-        <Button
-          onClick={copyToClipboard}
-          className="w-full flex items-center gap-2"
-          size="lg"
-          data-testid="button-copy-clipboard"
-        >
-          <Copy className="h-5 w-5" />
-          Copy ke Clipboard
-        </Button>
+        {/* Save and Copy Buttons */}
+        <div className="space-y-3">
+          <Button
+            onClick={saveToDatabase}
+            className="w-full flex items-center gap-2 bg-green-600 hover:bg-green-700"
+            size="lg"
+            disabled={saveSetoranMutation.isPending}
+            data-testid="button-save-database"
+          >
+            <Save className="h-5 w-5" />
+            {saveSetoranMutation.isPending ? "Menyimpan..." : "Simpan ke Database"}
+          </Button>
+          
+          <Button
+            onClick={copyToClipboard}
+            className="w-full flex items-center gap-2"
+            size="lg"
+            variant="outline"
+            data-testid="button-copy-clipboard"
+          >
+            <Copy className="h-5 w-5" />
+            Copy ke Clipboard
+          </Button>
+        </div>
       </div>
     </div>
   );
