@@ -168,6 +168,8 @@ export const insertUserSchema = createInsertSchema(users).omit({
   createdAt: true,
 }).extend({
   storeIds: z.array(z.number()).min(1, "Please select at least one store"),
+  // Convert salary from number to string to match decimal field type
+  salary: z.coerce.number().min(0, "Salary must be a positive number").optional().transform((val) => val?.toString()),
 });
 
 export const insertUserStoreSchema = createInsertSchema(userStores).omit({
