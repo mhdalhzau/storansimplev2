@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Plus, Minus, Copy, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +18,119 @@ interface IncomeItem {
   description: string;
   amount: number;
 }
+
+// Custom Hook untuk validasi input decimal
+const useDecimalInput = (initialValue: number = 0) => {
+  const [value, setValue] = useState<number>(initialValue);
+
+  const validateAndCleanInput = useCallback((inputValue: string): string => {
+    let cleanedValue = inputValue;
+    
+    // 1. Pencegahan Input Alfabet
+    cleanedValue = cleanedValue.replace(/[a-zA-Z]/g, '');
+    
+    // 2. Konversi Otomatis: Titik ke koma
+    cleanedValue = cleanedValue.replace(/\./g, ',');
+    
+    // 3. Validasi Ketat: Hanya angka dan koma
+    cleanedValue = cleanedValue.replace(/[^0-9,]/g, '');
+    
+    // 4. Pembatasan Format: Maksimal 3 digit setelah koma
+    const parts = cleanedValue.split(',');
+    if (parts.length > 2) {
+      cleanedValue = parts[0] + ',' + parts[1];
+    }
+    if (parts.length === 2 && parts[1].length > 3) {
+      cleanedValue = parts[0] + ',' + parts[1].substring(0, 3);
+    }
+    
+    return cleanedValue;
+  }, []);
+
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const cleanedValue = validateAndCleanInput(e.target.value);
+    
+    if (cleanedValue === '' || cleanedValue === ',') {
+      setValue(0);
+    } else {
+      const numValue = parseFloat(cleanedValue.replace(',', '.'));
+      if (!isNaN(numValue) && numValue >= 0) {
+        setValue(numValue);
+      }
+    }
+  }, [validateAndCleanInput]);
+
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const paste = e.clipboardData?.getData('text') || '';
+    const cleanedPaste = validateAndCleanInput(paste);
+    
+    (e.target as HTMLInputElement).value = cleanedPaste;
+    e.target.dispatchEvent(new Event('input', { bubbles: true }));
+  }, [validateAndCleanInput]);
+
+  const displayValue = useMemo(() => {
+    return value === 0 ? "" : value.toString().replace('.', ',');
+  }, [value]);
+
+  return {
+    value,
+    displayValue,
+    handleChange,
+    handlePaste,
+    setValue
+  };
+};
+
+// Custom Hook untuk manajemen items (expenses/income)
+const useItemsManager = <T extends { id: string; description: string; amount: number }>() => {
+  const [items, setItems] = useState<T[]>([]);
+
+  const addItem = useCallback((newItem: T) => {
+    setItems(prevItems => [...prevItems, newItem]);
+  }, []);
+
+  const removeItem = useCallback((id: string) => {
+    setItems(prevItems => prevItems.filter(item => item.id !== id));
+  }, []);
+
+  const updateItem = useCallback((id: string, field: keyof T, value: string | number) => {
+    setItems(prevItems => 
+      prevItems.map(item => 
+        item.id === id ? { ...item, [field]: value } : item
+      )
+    );
+  }, []);
+
+  const validItems = useMemo(() => 
+    items.filter(item => item.description.trim() && item.amount > 0), 
+    [items]
+  );
+
+  const incompleteItems = useMemo(() => 
+    items.filter(item => 
+      (item.description.trim() && item.amount <= 0) || 
+      (!item.description.trim() && item.amount > 0)
+    ), 
+    [items]
+  );
+
+  const total = useMemo(() => 
+    validItems.reduce((sum, item) => sum + item.amount, 0), 
+    [validItems]
+  );
+
+  return {
+    items,
+    validItems,
+    incompleteItems,
+    total,
+    addItem,
+    removeItem,
+    updateItem,
+    hasIncomplete: incompleteItems.length > 0
+  };
+};
 
 export default function StaffPage() {
   const { toast } = useToast();
