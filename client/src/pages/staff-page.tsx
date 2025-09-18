@@ -199,8 +199,8 @@ export default function StaffPage() {
     item.amount > 0 && 
     item.description.toLowerCase().includes('(pu)')
   );
-  const totalExpenses = validExpenses.reduce((sum, item) => sum + item.amount, 0);
-  const totalIncome = validIncome.reduce((sum, item) => sum + item.amount, 0);
+  const totalExpenses = validExpenses.reduce((sum, item) => sum + Number(item.amount), 0);
+  const totalIncome = validIncome.reduce((sum, item) => sum + Number(item.amount), 0);
   const totalKeseluruhan = cashSetoran + totalIncome - totalExpenses; // Cash + Pemasukan - Pengeluaran
   
   // Validasi untuk enable/disable button
