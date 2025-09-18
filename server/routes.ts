@@ -478,6 +478,17 @@ export function registerRoutes(app: Express): Server {
         return res.status(403).json({ message: "Forbidden" });
       }
       
+      // Get the proposal first to check store access
+      const existingProposal = await storage.getProposal(req.params.id);
+      if (!existingProposal) {
+        return res.status(404).json({ message: "Proposal not found" });
+      }
+      
+      // Verify store access
+      if (!(await hasStoreAccess(req.user, existingProposal.storeId))) {
+        return res.status(403).json({ message: "You don't have access to approve proposals for this store" });
+      }
+      
       const proposal = await storage.updateProposalStatus(req.params.id, 'approved', req.user.id);
       if (!proposal) return res.status(404).json({ message: "Proposal not found" });
       
@@ -491,6 +502,17 @@ export function registerRoutes(app: Express): Server {
     try {
       if (!req.user || !['manager', 'administrasi'].includes(req.user.role)) {
         return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      // Get the proposal first to check store access
+      const existingProposal = await storage.getProposal(req.params.id);
+      if (!existingProposal) {
+        return res.status(404).json({ message: "Proposal not found" });
+      }
+      
+      // Verify store access
+      if (!(await hasStoreAccess(req.user, existingProposal.storeId))) {
+        return res.status(403).json({ message: "You don't have access to reject proposals for this store" });
       }
       
       const proposal = await storage.updateProposalStatus(req.params.id, 'rejected', req.user.id);
