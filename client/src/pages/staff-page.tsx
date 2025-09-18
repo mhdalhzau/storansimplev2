@@ -176,6 +176,8 @@ export default function StaffPage() {
   const [jamKeluar, setJamKeluar] = useState("");
   const [nomorAwal, setNomorAwal] = useState(0);
   const [nomorAkhir, setNomorAkhir] = useState(0);
+  const [nomorAwalText, setNomorAwalText] = useState("");
+  const [nomorAkhirText, setNomorAkhirText] = useState("");
   const [qrisSetoran, setQrisSetoran] = useState(0);
   const [expenses, setExpenses] = useState<ExpenseItem[]>([]);
   const [income, setIncome] = useState<IncomeItem[]>([]);
@@ -455,7 +457,7 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
                   type="text"
                   inputMode="decimal"
                   placeholder="Contoh: 1234,567"
-                  value={nomorAwal === 0 ? "" : nomorAwal.toString().replace('.', ',')}
+                  value={nomorAwalText}
                   onChange={(e) => {
                     let value = e.target.value;
                     
@@ -479,7 +481,10 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
                       value = parts[0] + ',' + parts[1].substring(0, 3);
                     }
                     
-                    // Update state
+                    // Update text state (preserves what user is typing)
+                    setNomorAwalText(value);
+                    
+                    // Update numeric state for calculations
                     if (value === '' || value === ',') {
                       setNomorAwal(0);
                     } else {
@@ -508,9 +513,18 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
                       cleanedPaste = parts[0] + ',' + parts[1].substring(0, 3);
                     }
                     
-                    // Trigger onChange dengan nilai yang sudah dibersihkan
-                    (e.target as HTMLInputElement).value = cleanedPaste;
-                    e.target.dispatchEvent(new Event('input', { bubbles: true }));
+                    // Update text state directly
+                    setNomorAwalText(cleanedPaste);
+                    
+                    // Update numeric state for calculations
+                    if (cleanedPaste === '' || cleanedPaste === ',') {
+                      setNomorAwal(0);
+                    } else {
+                      const numValue = parseFloat(cleanedPaste.replace(',', '.'));
+                      if (!isNaN(numValue) && numValue >= 0) {
+                        setNomorAwal(numValue);
+                      }
+                    }
                   }}
                   data-testid="input-nomor-awal"
                 />
@@ -521,7 +535,7 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
                   type="text"
                   inputMode="decimal"
                   placeholder="Contoh: 1567,234"
-                  value={nomorAkhir === 0 ? "" : nomorAkhir.toString().replace('.', ',')}
+                  value={nomorAkhirText}
                   onChange={(e) => {
                     let value = e.target.value;
                     
@@ -545,7 +559,10 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
                       value = parts[0] + ',' + parts[1].substring(0, 3);
                     }
                     
-                    // Update state
+                    // Update text state (preserves what user is typing)
+                    setNomorAkhirText(value);
+                    
+                    // Update numeric state for calculations
                     if (value === '' || value === ',') {
                       setNomorAkhir(0);
                     } else {
@@ -574,9 +591,18 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
                       cleanedPaste = parts[0] + ',' + parts[1].substring(0, 3);
                     }
                     
-                    // Trigger onChange dengan nilai yang sudah dibersihkan
-                    (e.target as HTMLInputElement).value = cleanedPaste;
-                    e.target.dispatchEvent(new Event('input', { bubbles: true }));
+                    // Update text state directly
+                    setNomorAkhirText(cleanedPaste);
+                    
+                    // Update numeric state for calculations
+                    if (cleanedPaste === '' || cleanedPaste === ',') {
+                      setNomorAkhir(0);
+                    } else {
+                      const numValue = parseFloat(cleanedPaste.replace(',', '.'));
+                      if (!isNaN(numValue) && numValue >= 0) {
+                        setNomorAkhir(numValue);
+                      }
+                    }
                   }}
                   data-testid="input-nomor-akhir"
                 />
