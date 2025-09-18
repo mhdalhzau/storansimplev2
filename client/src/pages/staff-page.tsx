@@ -188,16 +188,13 @@ export default function StaffPage() {
   const cashSetoran = Math.max(0, totalSetoran - qrisSetoran); // Cash = Total - QRIS, prevent negative
   
   // Only count valid items (with description and amount > 0)
-  // Filter hanya item yang mengandung "(pu)" untuk copy dan save
   const validExpenses = expenses.filter(item => 
     item.description.trim() && 
-    item.amount > 0 && 
-    item.description.toLowerCase().includes('(pu)')
+    item.amount > 0
   );
   const validIncome = income.filter(item => 
     item.description.trim() && 
-    item.amount > 0 && 
-    item.description.toLowerCase().includes('(pu)')
+    item.amount > 0
   );
   const totalExpenses = validExpenses.reduce((sum, item) => sum + Number(item.amount), 0);
   const totalIncome = validIncome.reduce((sum, item) => sum + Number(item.amount), 0);
