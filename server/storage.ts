@@ -16,7 +16,11 @@ import {
   type Overtime,
   type InsertOvertime,
   type Setoran,
-  type InsertSetoran
+  type InsertSetoran,
+  type Customer,
+  type InsertCustomer,
+  type Piutang,
+  type InsertPiutang
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import session from "express-session";
@@ -86,6 +90,23 @@ export interface IStorage {
   getAllSetoran(): Promise<Setoran[]>;
   createSetoran(setoran: InsertSetoran): Promise<Setoran>;
   
+  // Customer methods
+  getCustomer(id: string): Promise<Customer | undefined>;
+  getCustomersByStore(storeId: number): Promise<Customer[]>;
+  getAllCustomers(): Promise<Customer[]>;
+  createCustomer(customer: InsertCustomer): Promise<Customer>;
+  updateCustomer(id: string, data: Partial<InsertCustomer>): Promise<Customer | undefined>;
+  deleteCustomer(id: string): Promise<void>;
+  
+  // Piutang methods
+  getPiutang(id: string): Promise<Piutang | undefined>;
+  getPiutangByStore(storeId: number): Promise<Piutang[]>;
+  getPiutangByCustomer(customerId: string): Promise<Piutang[]>;
+  getAllPiutang(): Promise<Piutang[]>;
+  createPiutang(piutang: InsertPiutang): Promise<Piutang>;
+  updatePiutangStatus(id: string, status: string, paidAmount?: number): Promise<Piutang | undefined>;
+  deletePiutang(id: string): Promise<void>;
+  
   sessionStore: SessionStore;
 }
 
@@ -99,6 +120,8 @@ export class MemStorage implements IStorage {
   private proposalRecords: Map<string, Proposal>;
   private overtimeRecords: Map<string, Overtime>;
   private setoranRecords: Map<string, Setoran>;
+  private customerRecords: Map<string, Customer>;
+  private piutangRecords: Map<string, Piutang>;
   public sessionStore: SessionStore;
 
   constructor() {
@@ -111,6 +134,8 @@ export class MemStorage implements IStorage {
     this.proposalRecords = new Map();
     this.overtimeRecords = new Map();
     this.setoranRecords = new Map();
+    this.customerRecords = new Map();
+    this.piutangRecords = new Map();
     
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000,
@@ -525,6 +550,7 @@ export class MemStorage implements IStorage {
     const newSetoran: Setoran = {
       id,
       ...setoran,
+      employeeId: setoran.employeeId ?? null,
       expensesData: setoran.expensesData ?? null,
       incomeData: setoran.incomeData ?? null,
       createdAt,
@@ -532,6 +558,105 @@ export class MemStorage implements IStorage {
     
     this.setoranRecords.set(id, newSetoran);
     return newSetoran;
+  }
+
+  // Customer methods
+  async getCustomer(id: string): Promise<Customer | undefined> {
+    return this.customerRecords.get(id);
+  }
+
+  async getCustomersByStore(storeId: number): Promise<Customer[]> {
+    return Array.from(this.customerRecords.values()).filter(
+      (customer) => customer.storeId === storeId
+    );
+  }
+
+  async getAllCustomers(): Promise<Customer[]> {
+    return Array.from(this.customerRecords.values());
+  }
+
+  async createCustomer(insertCustomer: InsertCustomer): Promise<Customer> {
+    const id = randomUUID();
+    const customer: Customer = {
+      ...insertCustomer,
+      id,
+      email: insertCustomer.email ?? null,
+      phone: insertCustomer.phone ?? null,
+      address: insertCustomer.address ?? null,
+      type: insertCustomer.type ?? "customer",
+      createdAt: new Date()
+    };
+    this.customerRecords.set(id, customer);
+    return customer;
+  }
+
+  async updateCustomer(id: string, data: Partial<InsertCustomer>): Promise<Customer | undefined> {
+    const customer = this.customerRecords.get(id);
+    if (customer) {
+      const updated = { ...customer, ...data };
+      this.customerRecords.set(id, updated);
+      return updated;
+    }
+    return undefined;
+  }
+
+  async deleteCustomer(id: string): Promise<void> {
+    this.customerRecords.delete(id);
+  }
+
+  // Piutang methods
+  async getPiutang(id: string): Promise<Piutang | undefined> {
+    return this.piutangRecords.get(id);
+  }
+
+  async getPiutangByStore(storeId: number): Promise<Piutang[]> {
+    return Array.from(this.piutangRecords.values()).filter(
+      (piutang) => piutang.storeId === storeId
+    );
+  }
+
+  async getPiutangByCustomer(customerId: string): Promise<Piutang[]> {
+    return Array.from(this.piutangRecords.values()).filter(
+      (piutang) => piutang.customerId === customerId
+    );
+  }
+
+  async getAllPiutang(): Promise<Piutang[]> {
+    return Array.from(this.piutangRecords.values());
+  }
+
+  async createPiutang(insertPiutang: InsertPiutang): Promise<Piutang> {
+    const id = randomUUID();
+    const piutang: Piutang = {
+      ...insertPiutang,
+      id,
+      dueDate: insertPiutang.dueDate ?? null,
+      status: insertPiutang.status ?? "belum_lunas",
+      paidAmount: insertPiutang.paidAmount ?? null,
+      paidAt: insertPiutang.paidAt ?? null,
+      createdAt: new Date()
+    };
+    this.piutangRecords.set(id, piutang);
+    return piutang;
+  }
+
+  async updatePiutangStatus(id: string, status: string, paidAmount?: number): Promise<Piutang | undefined> {
+    const piutang = this.piutangRecords.get(id);
+    if (piutang) {
+      const updated = {
+        ...piutang,
+        status,
+        paidAmount: paidAmount ? paidAmount.toString() : piutang.paidAmount,
+        paidAt: status === 'lunas' ? new Date() : piutang.paidAt
+      };
+      this.piutangRecords.set(id, updated);
+      return updated;
+    }
+    return undefined;
+  }
+
+  async deletePiutang(id: string): Promise<void> {
+    this.piutangRecords.delete(id);
   }
 }
 

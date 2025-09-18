@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 
 interface ExpenseItem {
@@ -138,20 +138,31 @@ export default function StaffPage() {
   const { toast } = useToast();
   const [currentDate, setCurrentDate] = useState("");
   
-  // Mutation untuk save data ke backend API
-  const saveSetoranMutation = useMutation({
-    mutationFn: async (data: any) => {
-      const response = await apiRequest('POST', '/api/setoran', data);
+  // Query untuk fetch all users
+  const { data: users = [], isLoading: isLoadingUsers } = useQuery({
+    queryKey: ['/api/users'],
+    queryFn: async () => {
+      const response = await apiRequest('GET', '/api/users');
       return response.json();
+    },
+  });
+
+  // Single endpoint submission (server handles all related records)
+  const submitDataMutation = useMutation({
+    mutationFn: async (data: any) => {
+      // Send all data to setoran endpoint - server will handle attendance, sales, cashflow creation
+      const setoranResponse = await apiRequest('POST', '/api/setoran', data);
+      return setoranResponse.json();
     },
     onSuccess: () => {
       toast({
         title: "✅ Berhasil Disimpan",
-        description: "Data setoran harian berhasil disimpan ke database",
+        description: "Data berhasil disimpan ke attendance, sales, cashflow, dan setoran",
         variant: "default",
       });
       
       // Reset form setelah berhasil save
+      setSelectedStaffId("");
       setEmployeeName("");
       setJamMasuk("");
       setJamKeluar("");
@@ -171,6 +182,7 @@ export default function StaffPage() {
   });
   
   // Form data
+  const [selectedStaffId, setSelectedStaffId] = useState("");
   const [employeeName, setEmployeeName] = useState("");
   const [jamMasuk, setJamMasuk] = useState("");
   const [jamKeluar, setJamKeluar] = useState("");
@@ -181,6 +193,15 @@ export default function StaffPage() {
   const [qrisSetoran, setQrisSetoran] = useState(0);
   const [expenses, setExpenses] = useState<ExpenseItem[]>([]);
   const [income, setIncome] = useState<IncomeItem[]>([]);
+
+  // Handle staff selection
+  const handleStaffSelect = (staffId: string) => {
+    setSelectedStaffId(staffId);
+    const selectedStaff = users.find((user: any) => user.id === staffId);
+    if (selectedStaff) {
+      setEmployeeName(selectedStaff.name);
+    }
+  };
 
   // Calculations
   const totalLiter = Math.max(0, nomorAkhir - nomorAwal); // Prevent negative liter
@@ -202,7 +223,7 @@ export default function StaffPage() {
   
   // Validasi untuk enable/disable button
   const isDataComplete = (
-    employeeName.trim() !== '' &&
+    selectedStaffId.trim() !== '' &&
     jamMasuk !== '' &&
     jamKeluar !== '' &&
     nomorAwal > 0 &&
@@ -308,10 +329,10 @@ export default function StaffPage() {
 
   const saveToDatabase = async () => {
     // Validasi form
-    if (!employeeName.trim()) {
+    if (!selectedStaffId.trim()) {
       toast({
         title: "❌ Data Tidak Lengkap",
-        description: "Role karyawan harus dipilih",
+        description: "Nama staff harus dipilih",
         variant: "destructive",
       });
       return;
@@ -348,17 +369,26 @@ export default function StaffPage() {
     // Prepare data untuk API
     const setoranData = {
       employee_name: employeeName,
+      employeeId: selectedStaffId,
       jam_masuk: jamMasuk,
       jam_keluar: jamKeluar,
       nomor_awal: nomorAwal,
       nomor_akhir: nomorAkhir,
       qris_setoran: qrisSetoran,
+      total_liter: totalLiter,
+      total_setoran: totalSetoran,
+      cash_setoran: cashSetoran,
+      total_expenses: totalExpenses,
+      total_income: totalIncome,
+      total_keseluruhan: totalKeseluruhan,
+      validExpenses: validExpenses,
+      validIncome: validIncome,
       expenses: validExpenses,
       income: validIncome
     };
     
     // Save ke database
-    saveSetoranMutation.mutate(setoranData);
+    submitDataMutation.mutate(setoranData);
   };
 
   // Fungsi gabungan: Copy ke clipboard + Auto save ke database
@@ -367,7 +397,7 @@ export default function StaffPage() {
     if (!isDataComplete) {
       toast({
         title: "❌ Data Tidak Lengkap",
-        description: "Lengkapi role karyawan, jam kerja, dan data meter terlebih dahulu",
+        description: "Lengkapi nama staff, jam kerja, dan data meter terlebih dahulu",
         variant: "destructive",
       });
       return;
@@ -435,7 +465,7 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
         income: validIncome
       };
       
-      saveSetoranMutation.mutate(setoranData);
+      submitDataMutation.mutate(setoranData);
       
       toast({
         title: "✅ Berhasil!",
@@ -464,23 +494,29 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
           </p>
         </div>
 
-        {/* Employee Role */}
+        {/* Staff Selection */}
         <Card>
           <CardContent className="pt-6">
             <Label className="text-lg font-semibold flex items-center gap-2">
-              🤷‍♂️ Role Karyawan
+              👤 Nama Staff
             </Label>
-            <select
-              value={employeeName}
-              onChange={(e) => setEmployeeName(e.target.value)}
-              className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              data-testid="select-employee-role"
-            >
-              <option value="">Pilih Role Karyawan</option>
-              <option value="karyawan">Karyawan (Staff)</option>
-              <option value="manager">Manager</option>
-              <option value="keuangan">Keuangan (Administrator)</option>
-            </select>
+            {isLoadingUsers ? (
+              <div className="mt-2 text-gray-500">Loading staff...</div>
+            ) : (
+              <select
+                value={selectedStaffId}
+                onChange={(e) => handleStaffSelect(e.target.value)}
+                className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                data-testid="select-staff-name"
+              >
+                <option value="">Pilih Nama Staff</option>
+                {users.map((user: any) => (
+                  <option key={user.id} value={user.id}>
+                    {user.name} ({user.role})
+                  </option>
+                ))}
+              </select>
+            )}
           </CardContent>
         </Card>
 
@@ -894,11 +930,11 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
             onClick={copyAndSave}
             className="w-full flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
             size="lg"
-            disabled={!isDataComplete || saveSetoranMutation.isPending}
+            disabled={!isDataComplete || submitDataMutation.isPending}
             data-testid="button-copy-and-save"
           >
             <Copy className="h-5 w-5" />
-            {saveSetoranMutation.isPending ? "Memproses..." : "Copy + Simpan Data (PU)"}
+            {submitDataMutation.isPending ? "Memproses..." : "Copy + Simpan Data (PU)"}
           </Button>
         </div>
       </div>

@@ -7,8 +7,12 @@ import {
   insertCashflowSchema,
   insertProposalSchema,
   insertOvertimeSchema,
-  insertSetoranSchema
+  insertSetoranSchema,
+  insertSalesSchema,
+  insertCustomerSchema,
+  insertPiutangSchema
 } from "@shared/schema";
+import { z } from "zod";
 
 export function registerRoutes(app: Express): Server {
   // Setup authentication routes
@@ -19,10 +23,32 @@ export function registerRoutes(app: Express): Server {
     try {
       if (!req.user) return res.status(401).json({ message: "Unauthorized" });
       
+      let targetUserId = req.user.id;
+      let targetStoreId = req.user.storeId;
+      
+      // Allow managers and admins to create attendance for other users
+      if (req.body.userId && ['manager', 'administrasi'].includes(req.user.role)) {
+        targetUserId = req.body.userId;
+        
+        // For managers, verify the target user is in the same store
+        if (req.user.role === 'manager') {
+          const targetUser = await storage.getUser(req.body.userId);
+          if (!targetUser || targetUser.storeId !== req.user.storeId) {
+            return res.status(403).json({ message: "Cannot create attendance for users outside your store" });
+          }
+        }
+        
+        // Get target user's store for attendance record
+        const targetUser = await storage.getUser(targetUserId);
+        if (targetUser?.storeId) {
+          targetStoreId = targetUser.storeId;
+        }
+      }
+      
       const data = insertAttendanceSchema.parse({
         ...req.body,
-        userId: req.user.id,
-        storeId: req.user.storeId,
+        userId: targetUserId,
+        storeId: targetStoreId,
       });
       
       const attendance = await storage.createAttendance(data);
@@ -353,9 +379,12 @@ export function registerRoutes(app: Express): Server {
   // Setoran routes
   app.post("/api/setoran", async (req, res) => {
     try {
+      if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+      
       // Calculate all values
       const {
         employee_name,
+        employeeId,
         jam_masuk,
         jam_keluar,
         nomor_awal,
@@ -365,24 +394,35 @@ export function registerRoutes(app: Express): Server {
         income
       } = req.body;
 
+      // Server-side calculations (don't trust client values)
+      const parsed_nomor_awal = Number(nomor_awal) || 0;
+      const parsed_nomor_akhir = Number(nomor_akhir) || 0;
+      const parsed_qris_setoran = Number(qris_setoran) || 0;
+      
       // Calculate liter
-      const total_liter = Math.max(0, nomor_akhir - nomor_awal);
+      const total_liter = Math.max(0, parsed_nomor_akhir - parsed_nomor_awal);
       
       // Calculate setoran (1 liter = Rp 11.500)
       const total_setoran = total_liter * 11500;
-      const cash_setoran = Math.max(0, total_setoran - qris_setoran);
+      const cash_setoran = Math.max(0, total_setoran - parsed_qris_setoran);
       
-      // Calculate expenses and income
-      const total_expenses = expenses?.reduce((sum: number, item: any) => 
-        sum + (Number(item.amount) || 0), 0) || 0;
-      const total_income = income?.reduce((sum: number, item: any) => 
-        sum + (Number(item.amount) || 0), 0) || 0;
+      // Calculate expenses and income (validate amounts)
+      const total_expenses = expenses?.reduce((sum: number, item: any) => {
+        const amount = Number(item.amount) || 0;
+        return sum + Math.max(0, amount); // Ensure non-negative
+      }, 0) || 0;
+      
+      const total_income = income?.reduce((sum: number, item: any) => {
+        const amount = Number(item.amount) || 0;
+        return sum + Math.max(0, amount); // Ensure non-negative
+      }, 0) || 0;
       
       // Total keseluruhan = Cash + Pemasukan - Pengeluaran
       const total_keseluruhan = cash_setoran + total_income - total_expenses;
       
       const data = insertSetoranSchema.parse({
         employeeName: employee_name,
+        employeeId: employeeId || null,
         jamMasuk: jam_masuk,
         jamKeluar: jam_keluar,
         nomorAwal: nomor_awal.toString(),
@@ -399,7 +439,116 @@ export function registerRoutes(app: Express): Server {
       });
       
       const setoran = await storage.createSetoran(data);
-      res.status(201).json(setoran);
+      
+      // Create related records based on user permissions
+      const results: any = { setoran };
+      
+      // 1. Create attendance with proper authorization checks
+      if (employeeId && jam_masuk && jam_keluar) {
+        try {
+          let targetUserId = req.user.id;
+          let targetStoreId = req.user.storeId;
+          
+          // Only allow creating attendance for other users if manager/admin
+          if (employeeId !== req.user.id) {
+            if (!['manager', 'administrasi'].includes(req.user.role)) {
+              // Staff cannot create attendance for other users - use their own ID
+              targetUserId = req.user.id;
+              targetStoreId = req.user.storeId;
+            } else if (req.user.role === 'manager') {
+              // For managers, verify the target user is in the same store
+              const targetUser = await storage.getUser(employeeId);
+              if (!targetUser || targetUser.storeId !== req.user.storeId) {
+                // Block creation for users outside manager's store
+                throw new Error('Managers cannot create attendance for users outside their store');
+              } else {
+                targetUserId = employeeId;
+                targetStoreId = targetUser.storeId;
+              }
+            } else {
+              // For admins, get target user's store
+              const targetUser = await storage.getUser(employeeId);
+              if (!targetUser) {
+                throw new Error('Target user not found');
+              }
+              targetUserId = employeeId;
+              targetStoreId = targetUser.storeId || req.user.storeId;
+            }
+          }
+          
+          const attendanceData = insertAttendanceSchema.parse({
+            userId: targetUserId,
+            storeId: targetStoreId,
+            checkIn: jam_masuk,
+            checkOut: jam_keluar,
+            notes: `Setoran harian - ${employee_name}`
+          });
+          
+          const attendance = await storage.createAttendance(attendanceData);
+          results.attendance = attendance;
+        } catch (attendanceError) {
+          // Log error but don't fail the entire operation
+          console.warn('Failed to create attendance:', attendanceError);
+        }
+      }
+      
+      // 2. Create sales record for all setoran submissions
+      {
+        try {
+          const salesData = insertSalesSchema.parse({
+            storeId: req.user.storeId,
+            totalSales: total_setoran.toString(),
+            transactions: Math.round(total_liter),
+            averageTicket: total_liter > 0 ? (total_setoran / total_liter).toString() : "0"
+          });
+          
+          const sales = await storage.createSales(salesData);
+          results.sales = sales;
+        } catch (salesError) {
+          console.warn('Failed to create sales record:', salesError);
+        }
+      }
+      
+      // 3. Create cashflow records for expenses and income for all setoran submissions
+      {
+        try {
+          // Create expense records
+          if (expenses?.length > 0) {
+            for (const expense of expenses) {
+              if (expense.description && expense.amount > 0) {
+                const expenseData = insertCashflowSchema.parse({
+                  storeId: req.user.storeId,
+                  category: 'Expense',
+                  type: 'Other',
+                  amount: expense.amount.toString(),
+                  description: expense.description
+                });
+                await storage.createCashflow(expenseData);
+              }
+            }
+          }
+          
+          // Create income records
+          if (income?.length > 0) {
+            for (const incomeItem of income) {
+              if (incomeItem.description && incomeItem.amount > 0) {
+                const incomeData = insertCashflowSchema.parse({
+                  storeId: req.user.storeId,
+                  category: 'Income',
+                  type: 'Other',
+                  amount: incomeItem.amount.toString(),
+                  description: incomeItem.description
+                });
+                await storage.createCashflow(incomeData);
+              }
+            }
+          }
+        } catch (cashflowError) {
+          console.warn('Failed to create cashflow records:', cashflowError);
+        }
+      }
+      
+      res.status(201).json(results);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }
@@ -556,6 +705,179 @@ export function registerRoutes(app: Express): Server {
       const { id } = req.params;
       const employees = await storage.getUsersByStore(parseInt(id));
       res.json(employees);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Customer routes
+  app.get("/api/customers", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+      
+      let customers;
+      if (req.user.role === 'administrasi') {
+        customers = await storage.getAllCustomers();
+      } else {
+        customers = await storage.getCustomersByStore(req.user.storeId!);
+      }
+      
+      res.json(customers);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/customers", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+      
+      const data = insertCustomerSchema.parse({
+        ...req.body,
+        storeId: req.user.storeId,
+      });
+      
+      const customer = await storage.createCustomer(data);
+      res.status(201).json(customer);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/customers/:id", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+      
+      // Check authorization: managers can only update their store customers, admins can update any
+      const existingCustomer = await storage.getCustomer(req.params.id);
+      if (!existingCustomer) return res.status(404).json({ message: "Customer not found" });
+      
+      if (req.user.role === 'staff') {
+        return res.status(403).json({ message: "Staff cannot update customers" });
+      }
+      
+      if (req.user.role === 'manager' && existingCustomer.storeId !== req.user.storeId) {
+        return res.status(403).json({ message: "Cannot update customers from other stores" });
+      }
+      
+      // Validate request body using partial customer schema
+      const validatedData = insertCustomerSchema.partial().parse(req.body);
+      
+      const customer = await storage.updateCustomer(req.params.id, validatedData);
+      res.json(customer);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/customers/:id", async (req, res) => {
+    try {
+      if (!req.user || !['manager', 'administrasi'].includes(req.user.role)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      // Check store authorization for managers
+      if (req.user.role === 'manager') {
+        const customer = await storage.getCustomer(req.params.id);
+        if (!customer) return res.status(404).json({ message: "Customer not found" });
+        
+        if (customer.storeId !== req.user.storeId) {
+          return res.status(403).json({ message: "Cannot delete customers from other stores" });
+        }
+      }
+      
+      await storage.deleteCustomer(req.params.id);
+      res.status(204).send();
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Piutang routes
+  app.get("/api/piutang", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+      
+      let piutang;
+      if (req.user.role === 'administrasi') {
+        piutang = await storage.getAllPiutang();
+      } else {
+        piutang = await storage.getPiutangByStore(req.user.storeId!);
+      }
+      
+      res.json(piutang);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/piutang", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+      
+      const data = insertPiutangSchema.parse({
+        ...req.body,
+        storeId: req.user.storeId,
+        createdBy: req.user.id,
+      });
+      
+      const piutang = await storage.createPiutang(data);
+      res.status(201).json(piutang);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/piutang/:id/status", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+      
+      // Check authorization: get existing piutang and verify access
+      const existingPiutang = await storage.getPiutang(req.params.id);
+      if (!existingPiutang) return res.status(404).json({ message: "Piutang not found" });
+      
+      if (req.user.role === 'staff') {
+        return res.status(403).json({ message: "Staff cannot update piutang status" });
+      }
+      
+      if (req.user.role === 'manager' && existingPiutang.storeId !== req.user.storeId) {
+        return res.status(403).json({ message: "Cannot update piutang from other stores" });
+      }
+      
+      // Validate request body
+      const statusSchema = z.object({
+        status: z.enum(['lunas', 'belum_lunas']),
+        paidAmount: z.number().optional()
+      });
+      
+      const { status, paidAmount } = statusSchema.parse(req.body);
+      const piutang = await storage.updatePiutangStatus(req.params.id, status, paidAmount);
+      
+      res.json(piutang);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/piutang/:id", async (req, res) => {
+    try {
+      if (!req.user || !['manager', 'administrasi'].includes(req.user.role)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      await storage.deletePiutang(req.params.id);
+      res.status(204).send();
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/piutang/customer/:customerId", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+      
+      const piutang = await storage.getPiutangByCustomer(req.params.customerId);
+      res.json(piutang);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }

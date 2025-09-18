@@ -111,6 +111,7 @@ export const overtime = pgTable("overtime", {
 export const setoran = pgTable("setoran", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   employeeName: text("employee_name").notNull(),
+  employeeId: varchar("employee_id"), // Add employee ID reference
   jamMasuk: text("jam_masuk").notNull(),
   jamKeluar: text("jam_keluar").notNull(),
   nomorAwal: decimal("nomor_awal", { precision: 10, scale: 3 }).notNull(),
@@ -124,6 +125,33 @@ export const setoran = pgTable("setoran", {
   incomeData: text("income_data"), // JSON string  
   totalIncome: decimal("total_income", { precision: 12, scale: 2 }).notNull(),
   totalKeseluruhan: decimal("total_keseluruhan", { precision: 12, scale: 2 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Customers table
+export const customers = pgTable("customers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  address: text("address"),
+  type: text("type").default("customer"), // 'customer', 'employee'
+  storeId: integer("store_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Piutang table (debt/receivables)
+export const piutang = pgTable("piutang", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  customerId: varchar("customer_id").notNull(),
+  storeId: integer("store_id").notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  description: text("description").notNull(),
+  dueDate: timestamp("due_date"),
+  status: text("status").default("belum_lunas"), // 'lunas', 'belum_lunas'
+  paidAmount: decimal("paid_amount", { precision: 10, scale: 2 }).default("0"),
+  paidAt: timestamp("paid_at"),
+  createdBy: varchar("created_by").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -181,6 +209,16 @@ export const insertSetoranSchema = createInsertSchema(setoran).omit({
   createdAt: true,
 });
 
+export const insertCustomerSchema = createInsertSchema(customers).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertPiutangSchema = createInsertSchema(piutang).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -200,3 +238,7 @@ export type Overtime = typeof overtime.$inferSelect;
 export type InsertOvertime = z.infer<typeof insertOvertimeSchema>;
 export type Setoran = typeof setoran.$inferSelect;
 export type InsertSetoran = z.infer<typeof insertSetoranSchema>;
+export type Customer = typeof customers.$inferSelect;
+export type InsertCustomer = z.infer<typeof insertCustomerSchema>;
+export type Piutang = typeof piutang.$inferSelect;
+export type InsertPiutang = z.infer<typeof insertPiutangSchema>;
