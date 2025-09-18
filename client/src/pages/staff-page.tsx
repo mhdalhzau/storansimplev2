@@ -171,6 +171,10 @@ export default function StaffPage() {
       setQrisSetoran(0);
       setExpenses([]);
       setIncome([]);
+      // Reset validation state
+      setIsValidated(false);
+      setValidationPassword("");
+      setShowValidation(false);
     },
     onError: (error: any) => {
       toast({
@@ -193,6 +197,11 @@ export default function StaffPage() {
   const [qrisSetoran, setQrisSetoran] = useState(0);
   const [expenses, setExpenses] = useState<ExpenseItem[]>([]);
   const [income, setIncome] = useState<IncomeItem[]>([]);
+  
+  // Password validation states
+  const [isValidated, setIsValidated] = useState(false);
+  const [validationPassword, setValidationPassword] = useState("");
+  const [showValidation, setShowValidation] = useState(false);
 
   // Handle staff selection
   const handleStaffSelect = (staffId: string) => {
@@ -200,6 +209,38 @@ export default function StaffPage() {
     const selectedStaff = users.find((user: any) => user.id === staffId);
     if (selectedStaff) {
       setEmployeeName(selectedStaff.name);
+    }
+    // Reset validation when staff changes
+    setIsValidated(false);
+    setValidationPassword("");
+    setShowValidation(false);
+  };
+
+  // Validation function
+  const validatePassword = () => {
+    if (!employeeName.trim()) {
+      toast({
+        title: "❌ Error",
+        description: "Pilih nama staff terlebih dahulu",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (validationPassword.trim().toLowerCase() === employeeName.trim().toLowerCase()) {
+      setIsValidated(true);
+      setShowValidation(false);
+      toast({
+        title: "✅ Validasi Berhasil",
+        description: "Password benar! Sekarang Anda dapat mengirim data",
+        variant: "default",
+      });
+    } else {
+      toast({
+        title: "❌ Validasi Gagal", 
+        description: "Password harus sama dengan nama Anda",
+        variant: "destructive",
+      });
     }
   };
 
@@ -227,7 +268,8 @@ export default function StaffPage() {
     jamMasuk !== '' &&
     jamKeluar !== '' &&
     nomorAwal > 0 &&
-    nomorAkhir > nomorAwal
+    nomorAkhir > nomorAwal &&
+    isValidated // Require validation
   );
 
   // Check for incomplete entries (partially filled forms)
@@ -394,9 +436,19 @@ export default function StaffPage() {
   // Fungsi gabungan: Copy ke clipboard + Auto save ke database
   const copyAndSave = async () => {
     // Validasi awal
+    if (!isValidated) {
+      toast({
+        title: "❌ Validasi Diperlukan",
+        description: "Masukkan nama Anda untuk validasi terlebih dahulu",
+        variant: "destructive",
+      });
+      setShowValidation(true);
+      return;
+    }
+    
     if (!isDataComplete) {
       toast({
-        title: "❌ Data Tidak Lengkap",
+        title: "❌ Data Tidak Lengkap", 
         description: "Lengkapi nama staff, jam kerja, dan data meter terlebih dahulu",
         variant: "destructive",
       });
@@ -924,6 +976,65 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
           </CardContent>
         </Card>
 
+        {/* Password Validation */}
+        <Card className={`${isValidated ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+          <CardContent className="pt-6">
+            <div className="space-y-4">
+              <Label className="text-lg font-semibold flex items-center gap-2">
+                🔐 Validasi Password
+                {isValidated && <span className="text-green-600 text-sm">(✅ Tervalidasi)</span>}
+              </Label>
+              
+              {!isValidated && (
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-600">
+                    Masukkan nama Anda sebagai password untuk validasi sebelum mengirim data
+                  </p>
+                  <div className="flex gap-2">
+                    <Input
+                      type="password"
+                      placeholder="Masukkan nama Anda"
+                      value={validationPassword}
+                      onChange={(e) => setValidationPassword(e.target.value)}
+                      disabled={!employeeName}
+                      data-testid="input-validation-password"
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          validatePassword();
+                        }
+                      }}
+                    />
+                    <Button 
+                      onClick={validatePassword}
+                      disabled={!validationPassword.trim() || !employeeName}
+                      data-testid="button-validate-password"
+                    >
+                      Validasi
+                    </Button>
+                  </div>
+                </div>
+              )}
+              
+              {isValidated && (
+                <div className="flex items-center gap-2 text-green-600">
+                  <span className="text-sm">Password tervalidasi untuk: {employeeName}</span>
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    onClick={() => {
+                      setIsValidated(false);
+                      setValidationPassword("");
+                    }}
+                    data-testid="button-reset-validation"
+                  >
+                    Reset
+                  </Button>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Save and Copy Buttons */}
         <div className="space-y-3">
           <Button
@@ -936,6 +1047,12 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
             <Copy className="h-5 w-5" />
             {submitDataMutation.isPending ? "Memproses..." : "Copy + Simpan Data (PU)"}
           </Button>
+          
+          {!isValidated && selectedStaffId && (
+            <p className="text-sm text-red-600 text-center">
+              ⚠️ Validasi password diperlukan sebelum mengirim data
+            </p>
+          )}
         </div>
       </div>
     </div>
