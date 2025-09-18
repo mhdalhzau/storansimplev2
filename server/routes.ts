@@ -14,6 +14,33 @@ import {
 } from "@shared/schema";
 import { z } from "zod";
 
+// Helper functions for multi-store authorization
+async function hasStoreAccess(user: any, storeId: number): Promise<boolean> {
+  // First verify the store exists
+  const store = await storage.getStore(storeId);
+  if (!store) return false;
+  
+  if (user.role === 'administrasi') return true; // Admins have access to all existing stores
+  
+  const userStores = await storage.getUserStores(user.id);
+  return userStores.some(store => store.id === storeId);
+}
+
+async function getUserFirstStoreId(user: any): Promise<number | undefined> {
+  const userStores = await storage.getUserStores(user.id);
+  return userStores.length > 0 ? userStores[0].id : undefined;
+}
+
+async function getAccessibleStoreIds(user: any): Promise<number[]> {
+  if (user.role === 'administrasi') {
+    const allStores = await storage.getAllStores();
+    return allStores.map(store => store.id);
+  }
+  
+  const userStores = await storage.getUserStores(user.id);
+  return userStores.map(store => store.id);
+}
+
 export function registerRoutes(app: Express): Server {
   // Setup authentication routes
   setupAuth(app);
@@ -24,25 +51,51 @@ export function registerRoutes(app: Express): Server {
       if (!req.user) return res.status(401).json({ message: "Unauthorized" });
       
       let targetUserId = req.user.id;
-      let targetStoreId = req.user.storeId;
+      let targetStoreId = req.body.storeId || await getUserFirstStoreId(req.user);
+      
+      // Verify store access for the current user
+      if (targetStoreId && !(await hasStoreAccess(req.user, targetStoreId))) {
+        return res.status(403).json({ message: "You don't have access to this store" });
+      }
       
       // Allow managers and admins to create attendance for other users
       if (req.body.userId && ['manager', 'administrasi'].includes(req.user.role)) {
         targetUserId = req.body.userId;
         
-        // For managers, verify the target user is in the same store
-        if (req.user.role === 'manager') {
+        // For non-admins, verify the target user shares at least one store
+        if (req.user.role !== 'administrasi') {
           const targetUser = await storage.getUser(req.body.userId);
-          if (!targetUser || targetUser.storeId !== req.user.storeId) {
-            return res.status(403).json({ message: "Cannot create attendance for users outside your store" });
+          if (!targetUser) {
+            return res.status(404).json({ message: "Target user not found" });
+          }
+          
+          const targetUserStores = await storage.getUserStores(targetUser.id);
+          const currentUserStores = await storage.getUserStores(req.user.id);
+          
+          const hasSharedStore = targetUserStores.some(ts => 
+            currentUserStores.some(cs => cs.id === ts.id)
+          );
+          
+          if (!hasSharedStore) {
+            return res.status(403).json({ message: "Cannot create attendance for users outside your stores" });
           }
         }
         
-        // Get target user's store for attendance record
-        const targetUser = await storage.getUser(targetUserId);
-        if (targetUser?.storeId) {
-          targetStoreId = targetUser.storeId;
+        // Use the specified storeId or target user's first store
+        if (!targetStoreId) {
+          const targetUser = await storage.getUser(targetUserId);
+          targetStoreId = await getUserFirstStoreId(targetUser);
         }
+        
+        // Ensure the target user is assigned to the target store
+        const targetUser = await storage.getUser(targetUserId);
+        if (targetUser && !(await hasStoreAccess(targetUser, targetStoreId))) {
+          return res.status(403).json({ message: "Cannot create attendance for user in a store they are not assigned to" });
+        }
+      }
+      
+      if (!targetStoreId) {
+        return res.status(400).json({ message: "Store ID is required" });
       }
       
       const data = insertAttendanceSchema.parse({
@@ -65,11 +118,23 @@ export function registerRoutes(app: Express): Server {
       const { storeId, date } = req.query;
       
       let records;
-      if (req.user.role === 'staff') {
+      if (req.user.role === 'staff' && !storeId) {
+        // Staff can see their own attendance across all their assigned stores
         records = await storage.getAttendanceByUser(req.user.id);
       } else {
-        const targetStoreId = storeId ? parseInt(storeId as string) : req.user.storeId;
-        records = await storage.getAttendanceByStore(targetStoreId!, date as string);
+        // Get attendance for specific store or user's first store
+        const targetStoreId = storeId ? parseInt(storeId as string) : await getUserFirstStoreId(req.user);
+        
+        if (!targetStoreId) {
+          return res.status(400).json({ message: "Store ID is required" });
+        }
+        
+        // Verify store access
+        if (!(await hasStoreAccess(req.user, targetStoreId))) {
+          return res.status(403).json({ message: "You don't have access to this store" });
+        }
+        
+        records = await storage.getAttendanceByStore(targetStoreId, date as string);
       }
       
       res.json(records);
@@ -84,6 +149,17 @@ export function registerRoutes(app: Express): Server {
         return res.status(403).json({ message: "Forbidden" });
       }
       
+      // Get the overtime record first to check store access
+      const existingOvertime = await storage.getOvertime(req.params.id);
+      if (!existingOvertime) {
+        return res.status(404).json({ message: "Overtime not found" });
+      }
+      
+      // Verify store access
+      if (!(await hasStoreAccess(req.user, existingOvertime.storeId))) {
+        return res.status(403).json({ message: "You don't have access to approve overtime for this store" });
+      }
+      
       const overtime = await storage.updateOvertimeStatus(req.params.id, 'approved', req.user.id);
       if (!overtime) return res.status(404).json({ message: "Overtime not found" });
       
@@ -96,23 +172,26 @@ export function registerRoutes(app: Express): Server {
   // Sales routes
   app.get("/api/sales", async (req, res) => {
     try {
-      if (!req.user || !['manager', 'administrasi'].includes(req.user.role)) {
+      if (!req.user || !['manager', 'administrasi', 'staff'].includes(req.user.role)) {
         return res.status(403).json({ message: "Forbidden" });
       }
       
       const { storeId, startDate, endDate } = req.query;
-      let targetStoreId;
       
-      if (req.user.role === 'manager') {
-        // Managers can only see their assigned store unless specifically requested
-        targetStoreId = storeId ? parseInt(storeId as string) : req.user.storeId;
-      } else {
-        // Administrators can access any store
-        targetStoreId = storeId ? parseInt(storeId as string) : 1; // Default to store 1 for demo
+      // Get target store ID - use provided storeId or user's first store
+      const targetStoreId = storeId ? parseInt(storeId as string) : await getUserFirstStoreId(req.user);
+      
+      if (!targetStoreId) {
+        return res.status(400).json({ message: "Store ID is required" });
+      }
+      
+      // Verify store access
+      if (!(await hasStoreAccess(req.user, targetStoreId))) {
+        return res.status(403).json({ message: "You don't have access to this store" });
       }
       
       const sales = await storage.getSalesByStore(
-        targetStoreId!, 
+        targetStoreId, 
         startDate as string, 
         endDate as string
       );
@@ -156,13 +235,24 @@ export function registerRoutes(app: Express): Server {
   // Cashflow routes
   app.post("/api/cashflow", async (req, res) => {
     try {
-      if (!req.user || !['manager', 'administrasi'].includes(req.user.role)) {
+      if (!req.user || !['manager', 'administrasi', 'staff'].includes(req.user.role)) {
         return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      const targetStoreId = req.body.storeId || await getUserFirstStoreId(req.user);
+      
+      if (!targetStoreId) {
+        return res.status(400).json({ message: "Store ID is required" });
+      }
+      
+      // Verify store access
+      if (!(await hasStoreAccess(req.user, targetStoreId))) {
+        return res.status(403).json({ message: "You don't have access to this store" });
       }
       
       const data = insertCashflowSchema.parse({
         ...req.body,
-        storeId: req.user.storeId,
+        storeId: targetStoreId,
       });
       
       const cashflow = await storage.createCashflow(data);
@@ -174,22 +264,23 @@ export function registerRoutes(app: Express): Server {
 
   app.get("/api/cashflow", async (req, res) => {
     try {
-      if (!req.user || !['manager', 'administrasi'].includes(req.user.role)) {
+      if (!req.user || !['manager', 'administrasi', 'staff'].includes(req.user.role)) {
         return res.status(403).json({ message: "Forbidden" });
       }
       
-      let cashflow;
-      if (req.user.role === 'manager') {
-        // Managers see cashflow for their assigned store
-        cashflow = await storage.getCashflowByStore(req.user.storeId!);
-      } else {
-        // Administrators can see all cashflow - we'll need to implement getAllCashflow
-        // For now, use store 1 as default for demo
-        const { storeId } = req.query;
-        const targetStoreId = storeId ? parseInt(storeId as string) : 1;
-        cashflow = await storage.getCashflowByStore(targetStoreId);
+      const { storeId } = req.query;
+      const targetStoreId = storeId ? parseInt(storeId as string) : await getUserFirstStoreId(req.user);
+      
+      if (!targetStoreId) {
+        return res.status(400).json({ message: "Store ID is required" });
       }
       
+      // Verify store access
+      if (!(await hasStoreAccess(req.user, targetStoreId))) {
+        return res.status(403).json({ message: "You don't have access to this store" });
+      }
+      
+      const cashflow = await storage.getCashflowByStore(targetStoreId);
       res.json(cashflow);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -203,12 +294,28 @@ export function registerRoutes(app: Express): Server {
         return res.status(403).json({ message: "Forbidden" });
       }
       
-      // Generate payroll for all users (simplified)
-      const users = Array.from((storage as any).users.values()).filter((u: any) => u.role === 'staff');
+      // Get accessible store IDs for the user
+      const accessibleStoreIds = await getAccessibleStoreIds(req.user);
+      if (accessibleStoreIds.length === 0) {
+        return res.status(403).json({ message: "No accessible stores" });
+      }
+      
+      // Generate payroll only for staff users in accessible stores
+      let users: any[] = [];
+      for (const storeId of accessibleStoreIds) {
+        const storeUsers = await storage.getUsersByStore(storeId);
+        users.push(...storeUsers.filter((u: any) => u.role === 'staff'));
+      }
+      
+      // Remove duplicates (users assigned to multiple stores)
+      const uniqueUsers = users.filter((user, index, self) => 
+        index === self.findIndex((u) => u.id === user.id)
+      );
+      
       const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
       
-      const payrollPromises = users.map(async (user: any) => {
-        const baseSalary = "3000.00"; // Default base salary
+      const payrollPromises = uniqueUsers.map(async (user: any) => {
+        const baseSalary = user.salary || "3000.00"; // Use user's salary or default
         const overtimePay = "240.00"; // Mock overtime calculation
         const totalAmount = (parseFloat(baseSalary) + parseFloat(overtimePay)).toString();
         
@@ -234,8 +341,31 @@ export function registerRoutes(app: Express): Server {
         return res.status(403).json({ message: "Forbidden" });
       }
       
-      const payroll = await storage.getAllPayroll();
-      res.json(payroll);
+      if (req.user.role === 'administrasi') {
+        // Admins can see all payroll
+        const payroll = await storage.getAllPayroll();
+        res.json(payroll);
+      } else {
+        // Managers can only see payroll for users in their accessible stores
+        const accessibleStoreIds = await getAccessibleStoreIds(req.user);
+        let filteredPayroll: any[] = [];
+        
+        for (const storeId of accessibleStoreIds) {
+          const storeUsers = await storage.getUsersByStore(storeId);
+          const storeUserIds = storeUsers.map(u => u.id);
+          
+          const allPayroll = await storage.getAllPayroll();
+          const storePayroll = allPayroll.filter(p => storeUserIds.includes(p.userId));
+          filteredPayroll.push(...storePayroll);
+        }
+        
+        // Remove duplicates
+        const uniquePayroll = filteredPayroll.filter((payroll, index, self) => 
+          index === self.findIndex((p) => p.id === payroll.id)
+        );
+        
+        res.json(uniquePayroll);
+      }
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }
@@ -245,6 +375,31 @@ export function registerRoutes(app: Express): Server {
     try {
       if (!req.user || !['manager', 'administrasi'].includes(req.user.role)) {
         return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      // Get the payroll record to verify access
+      const existingPayroll = await storage.getPayroll(req.params.id);
+      if (!existingPayroll) {
+        return res.status(404).json({ message: "Payroll not found" });
+      }
+      
+      // For non-admins, verify they have access to the user's stores
+      if (req.user.role !== 'administrasi') {
+        const payrollUser = await storage.getUser(existingPayroll.userId);
+        if (!payrollUser) {
+          return res.status(404).json({ message: "Payroll user not found" });
+        }
+        
+        const payrollUserStores = await storage.getUserStores(payrollUser.id);
+        const currentUserStores = await storage.getUserStores(req.user.id);
+        
+        const hasSharedStore = payrollUserStores.some(ps => 
+          currentUserStores.some(cs => cs.id === ps.id)
+        );
+        
+        if (!hasSharedStore) {
+          return res.status(403).json({ message: "You don't have access to pay this user's payroll" });
+        }
       }
       
       const payroll = await storage.updatePayrollStatus(req.params.id, 'paid');
@@ -261,10 +416,21 @@ export function registerRoutes(app: Express): Server {
     try {
       if (!req.user) return res.status(401).json({ message: "Unauthorized" });
       
+      const targetStoreId = req.body.storeId || await getUserFirstStoreId(req.user);
+      
+      if (!targetStoreId) {
+        return res.status(400).json({ message: "Store ID is required" });
+      }
+      
+      // Verify store access
+      if (!(await hasStoreAccess(req.user, targetStoreId))) {
+        return res.status(403).json({ message: "You don't have access to this store" });
+      }
+      
       const data = insertProposalSchema.parse({
         ...req.body,
         userId: req.user.id,
-        storeId: req.user.storeId,
+        storeId: targetStoreId,
       });
       
       const proposal = await storage.createProposal(data);
@@ -278,18 +444,26 @@ export function registerRoutes(app: Express): Server {
     try {
       if (!req.user) return res.status(401).json({ message: "Unauthorized" });
       
+      const { storeId } = req.query;
+      
       let proposals;
-      if (req.user.role === 'staff') {
-        // Staff can only see proposals from their own store
-        proposals = await storage.getProposalsByStore(req.user.storeId!);
-      } else if (req.user.role === 'manager') {
-        // Managers can see proposals from their assigned store
-        proposals = await storage.getProposalsByStore(req.user.storeId!);
-      } else if (req.user.role === 'administrasi') {
-        // Administrators can see all proposals across all stores
+      if (req.user.role === 'administrasi' && !storeId) {
+        // Administrators can see all proposals across all stores when no specific store is requested
         proposals = await storage.getAllProposals();
       } else {
-        return res.status(403).json({ message: "Forbidden" });
+        // For all other cases, get proposals from specific store
+        const targetStoreId = storeId ? parseInt(storeId as string) : await getUserFirstStoreId(req.user);
+        
+        if (!targetStoreId) {
+          return res.status(400).json({ message: "Store ID is required" });
+        }
+        
+        // Verify store access
+        if (!(await hasStoreAccess(req.user, targetStoreId))) {
+          return res.status(403).json({ message: "You don't have access to this store" });
+        }
+        
+        proposals = await storage.getProposalsByStore(targetStoreId);
       }
       
       res.json(proposals);
@@ -447,23 +621,33 @@ export function registerRoutes(app: Express): Server {
       if (employeeId && jam_masuk && jam_keluar) {
         try {
           let targetUserId = req.user.id;
-          let targetStoreId = req.user.storeId;
+          let targetStoreId = await getUserFirstStoreId(req.user);
           
           // Only allow creating attendance for other users if manager/admin
           if (employeeId !== req.user.id) {
             if (!['manager', 'administrasi'].includes(req.user.role)) {
               // Staff cannot create attendance for other users - use their own ID
               targetUserId = req.user.id;
-              targetStoreId = req.user.storeId;
+              targetStoreId = await getUserFirstStoreId(req.user);
             } else if (req.user.role === 'manager') {
-              // For managers, verify the target user is in the same store
+              // For managers, verify the target user shares at least one store
               const targetUser = await storage.getUser(employeeId);
-              if (!targetUser || targetUser.storeId !== req.user.storeId) {
-                // Block creation for users outside manager's store
-                throw new Error('Managers cannot create attendance for users outside their store');
+              if (!targetUser) {
+                throw new Error('Target user not found');
+              }
+              
+              const targetUserStores = await storage.getUserStores(targetUser.id);
+              const currentUserStores = await storage.getUserStores(req.user.id);
+              
+              const hasSharedStore = targetUserStores.some(ts => 
+                currentUserStores.some(cs => cs.id === ts.id)
+              );
+              
+              if (!hasSharedStore) {
+                throw new Error('Managers cannot create attendance for users outside their stores');
               } else {
                 targetUserId = employeeId;
-                targetStoreId = targetUser.storeId;
+                targetStoreId = await getUserFirstStoreId(targetUser);
               }
             } else {
               // For admins, get target user's store
@@ -472,7 +656,7 @@ export function registerRoutes(app: Express): Server {
                 throw new Error('Target user not found');
               }
               targetUserId = employeeId;
-              targetStoreId = targetUser.storeId || req.user.storeId;
+              targetStoreId = await getUserFirstStoreId(targetUser);
             }
           }
           
@@ -495,8 +679,10 @@ export function registerRoutes(app: Express): Server {
       // 2. Create sales record for all setoran submissions
       {
         try {
+          const salesStoreId = await getUserFirstStoreId(req.user);
+          
           const salesData = insertSalesSchema.parse({
-            storeId: req.user.storeId,
+            storeId: salesStoreId,
             totalSales: total_setoran.toString(),
             transactions: Math.round(total_liter),
             averageTicket: total_liter > 0 ? (total_setoran / total_liter).toString() : "0"
@@ -516,8 +702,10 @@ export function registerRoutes(app: Express): Server {
           if (expenses?.length > 0) {
             for (const expense of expenses) {
               if (expense.description && expense.amount > 0) {
+                const cashflowStoreId = await getUserFirstStoreId(req.user);
+                
                 const expenseData = insertCashflowSchema.parse({
-                  storeId: req.user.storeId,
+                  storeId: cashflowStoreId,
                   category: 'Expense',
                   type: 'Other',
                   amount: expense.amount.toString(),
@@ -532,8 +720,10 @@ export function registerRoutes(app: Express): Server {
           if (income?.length > 0) {
             for (const incomeItem of income) {
               if (incomeItem.description && incomeItem.amount > 0) {
+                const cashflowStoreId = await getUserFirstStoreId(req.user);
+                
                 const incomeData = insertCashflowSchema.parse({
-                  storeId: req.user.storeId,
+                  storeId: cashflowStoreId,
                   category: 'Income',
                   type: 'Other',
                   amount: incomeItem.amount.toString(),
@@ -747,9 +937,20 @@ export function registerRoutes(app: Express): Server {
     try {
       if (!req.user) return res.status(401).json({ message: "Unauthorized" });
       
+      const targetStoreId = req.body.storeId || await getUserFirstStoreId(req.user);
+      
+      if (!targetStoreId) {
+        return res.status(400).json({ message: "Store ID is required" });
+      }
+      
+      // Verify store access
+      if (!(await hasStoreAccess(req.user, targetStoreId))) {
+        return res.status(403).json({ message: "You don't have access to this store" });
+      }
+      
       const data = insertCustomerSchema.parse({
         ...req.body,
-        storeId: req.user.storeId,
+        storeId: targetStoreId,
       });
       
       const customer = await storage.createCustomer(data);
@@ -771,8 +972,11 @@ export function registerRoutes(app: Express): Server {
         return res.status(403).json({ message: "Staff cannot update customers" });
       }
       
-      if (req.user.role === 'manager' && existingCustomer.storeId !== req.user.storeId) {
-        return res.status(403).json({ message: "Cannot update customers from other stores" });
+      // Check store access for non-admins
+      if (req.user.role !== 'administrasi') {
+        if (!(await hasStoreAccess(req.user, existingCustomer.storeId))) {
+          return res.status(403).json({ message: "Cannot update customers from stores you don't have access to" });
+        }
       }
       
       // Validate request body using partial customer schema
@@ -791,13 +995,13 @@ export function registerRoutes(app: Express): Server {
         return res.status(403).json({ message: "Forbidden" });
       }
       
-      // Check store authorization for managers
-      if (req.user.role === 'manager') {
+      // Check store authorization for non-admins
+      if (req.user.role !== 'administrasi') {
         const customer = await storage.getCustomer(req.params.id);
         if (!customer) return res.status(404).json({ message: "Customer not found" });
         
-        if (customer.storeId !== req.user.storeId) {
-          return res.status(403).json({ message: "Cannot delete customers from other stores" });
+        if (!(await hasStoreAccess(req.user, customer.storeId))) {
+          return res.status(403).json({ message: "Cannot delete customers from stores you don't have access to" });
         }
       }
       
@@ -830,9 +1034,20 @@ export function registerRoutes(app: Express): Server {
     try {
       if (!req.user) return res.status(401).json({ message: "Unauthorized" });
       
+      const targetStoreId = req.body.storeId || await getUserFirstStoreId(req.user);
+      
+      if (!targetStoreId) {
+        return res.status(400).json({ message: "Store ID is required" });
+      }
+      
+      // Verify store access
+      if (!(await hasStoreAccess(req.user, targetStoreId))) {
+        return res.status(403).json({ message: "You don't have access to this store" });
+      }
+      
       const data = insertPiutangSchema.parse({
         ...req.body,
-        storeId: req.user.storeId,
+        storeId: targetStoreId,
         createdBy: req.user.id,
       });
       
@@ -855,8 +1070,11 @@ export function registerRoutes(app: Express): Server {
         return res.status(403).json({ message: "Staff cannot update piutang status" });
       }
       
-      if (req.user.role === 'manager' && existingPiutang.storeId !== req.user.storeId) {
-        return res.status(403).json({ message: "Cannot update piutang from other stores" });
+      // Check store access for non-admins
+      if (req.user.role !== 'administrasi') {
+        if (!(await hasStoreAccess(req.user, existingPiutang.storeId))) {
+          return res.status(403).json({ message: "Cannot update piutang from stores you don't have access to" });
+        }
       }
       
       // Validate request body

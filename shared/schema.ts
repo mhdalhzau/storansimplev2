@@ -234,7 +234,10 @@ export const insertPiutangSchema = createInsertSchema(piutang).omit({
 });
 
 // Types
-export type User = typeof users.$inferSelect & { stores?: Store[] };
+export type User = typeof users.$inferSelect & { 
+  stores?: Store[];
+  storeId?: number; // Deprecated: for backward compatibility, use stores array instead
+};
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type UserStore = typeof userStores.$inferSelect;
 export type InsertUserStore = z.infer<typeof insertUserStoreSchema>;
