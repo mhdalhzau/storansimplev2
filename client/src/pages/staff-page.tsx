@@ -28,13 +28,13 @@ export default function StaffPage() {
   const [jamKeluar, setJamKeluar] = useState("");
   const [nomorAwal, setNomorAwal] = useState(0);
   const [nomorAkhir, setNomorAkhir] = useState(0);
-  const [totalSetoran, setTotalSetoran] = useState(0);
   const [qrisSetoran, setQrisSetoran] = useState(0);
   const [expenses, setExpenses] = useState<ExpenseItem[]>([]);
   const [income, setIncome] = useState<IncomeItem[]>([]);
 
   // Calculations
   const totalLiter = nomorAkhir - nomorAwal;
+  const totalSetoran = totalLiter * 11500; // Total = Total Liter × 11500
   const cashSetoran = totalSetoran - qrisSetoran; // Cash = Total - QRIS
   const totalExpenses = expenses.reduce((sum, item) => sum + item.amount, 0);
   const totalIncome = income.reduce((sum, item) => sum + item.amount, 0);
@@ -276,11 +276,10 @@ Setoran: ${formatCurrency(totalSetoran)} + Pemasukan: ${formatCurrency(totalInco
                   <span>Rp</span>
                   <div className="relative">
                     <Input
-                      type="number"
-                      value={totalSetoran || ""}
-                      onChange={(e) => setTotalSetoran(Number(e.target.value) || 0)}
-                      className="pr-10"
-                      data-testid="input-total-setoran"
+                      value={totalSetoran || "0"}
+                      readOnly
+                      className="pr-10 bg-green-50 cursor-default"
+                      data-testid="display-total-setoran"
                     />
                     <div className="absolute right-3 top-1/2 transform -translate-y-1/2 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
                       <span className="text-white text-xs">✓</span>
