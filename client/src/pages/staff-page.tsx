@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
-import { Plus, Minus, Copy } from "lucide-react";
+import { Plus, Minus, Copy, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 
 interface ExpenseItem {
@@ -43,6 +44,16 @@ export default function StaffPage() {
   const totalExpenses = validExpenses.reduce((sum, item) => sum + item.amount, 0);
   const totalIncome = validIncome.reduce((sum, item) => sum + item.amount, 0);
   const totalKeseluruhan = cashSetoran + totalIncome - totalExpenses; // Cash + Pemasukan - Pengeluaran
+
+  // Check for incomplete entries (partially filled forms)
+  const incompleteExpenses = expenses.filter(item => 
+    (item.description.trim() && item.amount <= 0) || (!item.description.trim() && item.amount > 0)
+  );
+  const incompleteIncome = income.filter(item => 
+    (item.description.trim() && item.amount <= 0) || (!item.description.trim() && item.amount > 0)
+  );
+  const hasIncompleteExpenses = incompleteExpenses.length > 0;
+  const hasIncompleteIncome = incompleteIncome.length > 0;
 
   useEffect(() => {
     const today = new Date();
@@ -391,6 +402,18 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
                 Tambah Item
               </Button>
             </div>
+            
+            {/* Reminder for incomplete expenses */}
+            {hasIncompleteExpenses && (
+              <Alert className="mb-4 border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20">
+                <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                <AlertDescription className="text-yellow-800 dark:text-yellow-200">
+                  ⚠️ <strong>Reminder:</strong> Ada {incompleteExpenses.length} item pengeluaran yang belum lengkap. 
+                  Silakan <strong>lengkapi semua field</strong> atau <strong>hapus item</strong> yang tidak digunakan 
+                  dengan tombol <Minus className="h-3 w-3 inline mx-1" /> merah.
+                </AlertDescription>
+              </Alert>
+            )}
             <div className="space-y-3">
               {expenses.map((item) => (
                 <div key={item.id} className="flex items-center gap-2">
@@ -445,6 +468,18 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
                 Tambah Item
               </Button>
             </div>
+            
+            {/* Reminder for incomplete income */}
+            {hasIncompleteIncome && (
+              <Alert className="mb-4 border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20">
+                <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                <AlertDescription className="text-yellow-800 dark:text-yellow-200">
+                  ⚠️ <strong>Reminder:</strong> Ada {incompleteIncome.length} item pemasukan yang belum lengkap. 
+                  Silakan <strong>lengkapi semua field</strong> atau <strong>hapus item</strong> yang tidak digunakan 
+                  dengan tombol <Minus className="h-3 w-3 inline mx-1" /> merah.
+                </AlertDescription>
+              </Alert>
+            )}
             <div className="space-y-3">
               {income.map((item) => (
                 <div key={item.id} className="flex items-center gap-2">
