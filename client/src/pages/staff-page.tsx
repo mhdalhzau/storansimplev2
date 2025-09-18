@@ -248,73 +248,109 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
             </Label>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <Label>Nomor Awal</Label>
+                <Label>Nomor Awal (Liter)</Label>
                 <Input
                   type="text"
                   inputMode="decimal"
+                  placeholder="Contoh: 1234,56"
                   value={nomorAwal === 0 ? "" : nomorAwal.toString().replace('.', ',')}
                   onChange={(e) => {
                     let value = e.target.value;
-                    // Replace . with , untuk format Indonesia
+                    
+                    // Allow both . and , as decimal separator initially
                     value = value.replace(/\./g, ',');
+                    
                     // Only allow numbers and one comma
                     value = value.replace(/[^0-9,]/g, '');
-                    // Only allow one comma
-                    const commaCount = (value.match(/,/g) || []).length;
-                    if (commaCount > 1) {
-                      value = value.replace(/,([^,]*)$/, (match, p1) => ',' + p1.replace(/,/g, ''));
+                    
+                    // Ensure only one comma is allowed
+                    const parts = value.split(',');
+                    if (parts.length > 2) {
+                      value = parts[0] + ',' + parts.slice(1).join('');
                     }
                     
                     if (value === '' || value === ',') {
                       setNomorAwal(0);
                     } else {
-                      // Convert Indonesian format to JavaScript decimal
+                      // Convert Indonesian format (comma) to JavaScript decimal (dot)
                       const numValue = parseFloat(value.replace(',', '.'));
-                      if (!isNaN(numValue)) {
-                        setNomorAwal(Math.max(0, numValue));
+                      if (!isNaN(numValue) && numValue >= 0) {
+                        setNomorAwal(numValue);
                       }
                     }
                   }}
-                  onKeyPress={(e) => {
-                    if (!/[0-9.,]/.test(e.key) && e.key !== 'Backspace' && e.key !== 'Delete' && e.key !== 'Enter' && e.key !== 'Tab') {
-                      e.preventDefault();
+                  onKeyDown={(e) => {
+                    // Allow navigation keys, backspace, delete, etc.
+                    if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'Tab', 'Enter'].includes(e.key)) {
+                      return;
                     }
+                    
+                    // Allow numbers
+                    if (/[0-9]/.test(e.key)) {
+                      return;
+                    }
+                    
+                    // Allow comma or dot for decimal (convert dot to comma)
+                    if ((e.key === ',' || e.key === '.') && !e.currentTarget.value.includes(',')) {
+                      return;
+                    }
+                    
+                    // Block everything else
+                    e.preventDefault();
                   }}
                   data-testid="input-nomor-awal"
                 />
               </div>
               <div>
-                <Label>Nomor Akhir</Label>
+                <Label>Nomor Akhir (Liter)</Label>
                 <Input
                   type="text"
                   inputMode="decimal"
+                  placeholder="Contoh: 1567,23"
                   value={nomorAkhir === 0 ? "" : nomorAkhir.toString().replace('.', ',')}
                   onChange={(e) => {
                     let value = e.target.value;
-                    // Replace . with , untuk format Indonesia
+                    
+                    // Allow both . and , as decimal separator initially
                     value = value.replace(/\./g, ',');
+                    
                     // Only allow numbers and one comma
                     value = value.replace(/[^0-9,]/g, '');
-                    // Only allow one comma
-                    const commaCount = (value.match(/,/g) || []).length;
-                    if (commaCount > 1) {
-                      value = value.replace(/,([^,]*)$/, (match, p1) => ',' + p1.replace(/,/g, ''));
+                    
+                    // Ensure only one comma is allowed
+                    const parts = value.split(',');
+                    if (parts.length > 2) {
+                      value = parts[0] + ',' + parts.slice(1).join('');
                     }
                     
                     if (value === '' || value === ',') {
                       setNomorAkhir(0);
                     } else {
-                      // Convert Indonesian format to JavaScript decimal
+                      // Convert Indonesian format (comma) to JavaScript decimal (dot)
                       const numValue = parseFloat(value.replace(',', '.'));
-                      if (!isNaN(numValue)) {
-                        setNomorAkhir(Math.max(0, numValue));
+                      if (!isNaN(numValue) && numValue >= 0) {
+                        setNomorAkhir(numValue);
                       }
                     }
                   }}
-                  onKeyPress={(e) => {
-                    if (!/[0-9.,]/.test(e.key) && e.key !== 'Backspace' && e.key !== 'Delete' && e.key !== 'Enter' && e.key !== 'Tab') {
-                      e.preventDefault();
+                  onKeyDown={(e) => {
+                    // Allow navigation keys, backspace, delete, etc.
+                    if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'Tab', 'Enter'].includes(e.key)) {
+                      return;
                     }
+                    
+                    // Allow numbers
+                    if (/[0-9]/.test(e.key)) {
+                      return;
+                    }
+                    
+                    // Allow comma or dot for decimal (convert dot to comma)
+                    if ((e.key === ',' || e.key === '.') && !e.currentTarget.value.includes(',')) {
+                      return;
+                    }
+                    
+                    // Block everything else
+                    e.preventDefault();
                   }}
                   data-testid="input-nomor-akhir"
                 />
