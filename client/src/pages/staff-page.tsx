@@ -147,6 +147,9 @@ export default function StaffPage() {
     },
   });
 
+  // Filter users to only show staff role
+  const staffUsers = users.filter((user: any) => user.role === 'staff');
+
   // Single endpoint submission (server handles all related records)
   const submitDataMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -162,7 +165,7 @@ export default function StaffPage() {
       });
       
       // Reset form setelah berhasil save
-      setSelectedStaffId("");
+      setSelectedStaffName("");
       setEmployeeName("");
       setJamMasuk("");
       setJamKeluar("");
@@ -186,7 +189,7 @@ export default function StaffPage() {
   });
   
   // Form data
-  const [selectedStaffId, setSelectedStaffId] = useState("");
+  const [selectedStaffName, setSelectedStaffName] = useState("");
   const [employeeName, setEmployeeName] = useState("");
   const [jamMasuk, setJamMasuk] = useState("");
   const [jamKeluar, setJamKeluar] = useState("");
@@ -204,9 +207,9 @@ export default function StaffPage() {
   const [showValidation, setShowValidation] = useState(false);
 
   // Handle staff selection
-  const handleStaffSelect = (staffId: string) => {
-    setSelectedStaffId(staffId);
-    const selectedStaff = users.find((user: any) => user.id === staffId);
+  const handleStaffSelect = (staffName: string) => {
+    setSelectedStaffName(staffName);
+    const selectedStaff = staffUsers.find((user: any) => user.name === staffName);
     if (selectedStaff) {
       setEmployeeName(selectedStaff.name);
     }
@@ -264,7 +267,7 @@ export default function StaffPage() {
   
   // Validasi untuk enable/disable button
   const isDataComplete = (
-    selectedStaffId.trim() !== '' &&
+    selectedStaffName.trim() !== '' &&
     jamMasuk !== '' &&
     jamKeluar !== '' &&
     nomorAwal > 0 &&
@@ -371,7 +374,7 @@ export default function StaffPage() {
 
   const saveToDatabase = async () => {
     // Validasi form
-    if (!selectedStaffId.trim()) {
+    if (!selectedStaffName.trim()) {
       toast({
         title: "❌ Data Tidak Lengkap",
         description: "Nama staff harus dipilih",
@@ -409,9 +412,10 @@ export default function StaffPage() {
     }
     
     // Prepare data untuk API
+    const selectedStaff = staffUsers.find((user: any) => user.name === selectedStaffName);
     const setoranData = {
       employee_name: employeeName,
-      employeeId: selectedStaffId,
+      employeeId: selectedStaff?.id || "",
       jam_masuk: jamMasuk,
       jam_keluar: jamKeluar,
       nomor_awal: nomorAwal,
@@ -506,13 +510,23 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
       await navigator.clipboard.writeText(reportText);
       
       // 2. Save ke database
+      const selectedStaff = staffUsers.find((user: any) => user.name === selectedStaffName);
       const setoranData = {
         employee_name: employeeName,
+        employeeId: selectedStaff?.id || "",
         jam_masuk: jamMasuk,
         jam_keluar: jamKeluar,
         nomor_awal: nomorAwal,
         nomor_akhir: nomorAkhir,
         qris_setoran: qrisSetoran,
+        total_liter: totalLiter,
+        total_setoran: totalSetoran,
+        cash_setoran: cashSetoran,
+        total_expenses: totalExpenses,
+        total_income: totalIncome,
+        total_keseluruhan: totalKeseluruhan,
+        validExpenses: validExpenses,
+        validIncome: validIncome,
         expenses: validExpenses,
         income: validIncome
       };
@@ -556,15 +570,15 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
               <div className="mt-2 text-gray-500">Loading staff...</div>
             ) : (
               <select
-                value={selectedStaffId}
+                value={selectedStaffName}
                 onChange={(e) => handleStaffSelect(e.target.value)}
                 className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 data-testid="select-staff-name"
               >
                 <option value="">Pilih Nama Staff</option>
-                {users.map((user: any) => (
-                  <option key={user.id} value={user.id}>
-                    {user.name} ({user.role})
+                {staffUsers.map((user: any) => (
+                  <option key={user.id} value={user.name}>
+                    {user.name}
                   </option>
                 ))}
               </select>
