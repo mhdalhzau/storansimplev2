@@ -280,23 +280,30 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
                     }
                   }}
                   onKeyDown={(e) => {
-                    // Allow navigation keys, backspace, delete, etc.
-                    if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'Tab', 'Enter'].includes(e.key)) {
+                    // Allow control keys (copy, paste, select all, etc.)
+                    if (e.ctrlKey || e.metaKey) {
+                      return;
+                    }
+                    
+                    // Allow navigation and editing keys
+                    if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'Tab', 'Enter', 'Escape'].includes(e.key)) {
                       return;
                     }
                     
                     // Allow numbers
-                    if (/[0-9]/.test(e.key)) {
+                    if (/^[0-9]$/.test(e.key)) {
                       return;
                     }
                     
-                    // Allow comma or dot for decimal (only if no decimal separator exists yet)
+                    // Allow decimal separator (comma or dot) if not already present
                     const currentValue = e.currentTarget.value;
-                    if ((e.key === ',' || e.key === '.') && !currentValue.includes(',') && !currentValue.includes('.')) {
-                      return;
+                    if (e.key === ',' || e.key === '.') {
+                      if (!currentValue.includes(',') && !currentValue.includes('.')) {
+                        return; // Allow first decimal separator
+                      }
                     }
                     
-                    // Block everything else
+                    // Block all other keys
                     e.preventDefault();
                   }}
                   data-testid="input-nomor-awal"
@@ -335,23 +342,30 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
                     }
                   }}
                   onKeyDown={(e) => {
-                    // Allow navigation keys, backspace, delete, etc.
-                    if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'Tab', 'Enter'].includes(e.key)) {
+                    // Allow control keys (copy, paste, select all, etc.)
+                    if (e.ctrlKey || e.metaKey) {
+                      return;
+                    }
+                    
+                    // Allow navigation and editing keys
+                    if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'Tab', 'Enter', 'Escape'].includes(e.key)) {
                       return;
                     }
                     
                     // Allow numbers
-                    if (/[0-9]/.test(e.key)) {
+                    if (/^[0-9]$/.test(e.key)) {
                       return;
                     }
                     
-                    // Allow comma or dot for decimal (only if no decimal separator exists yet)
+                    // Allow decimal separator (comma or dot) if not already present
                     const currentValue = e.currentTarget.value;
-                    if ((e.key === ',' || e.key === '.') && !currentValue.includes(',') && !currentValue.includes('.')) {
-                      return;
+                    if (e.key === ',' || e.key === '.') {
+                      if (!currentValue.includes(',') && !currentValue.includes('.')) {
+                        return; // Allow first decimal separator
+                      }
                     }
                     
-                    // Block everything else
+                    // Block all other keys
                     e.preventDefault();
                   }}
                   data-testid="input-nomor-akhir"
