@@ -42,8 +42,11 @@ export const attendance = pgTable("attendance", {
   date: timestamp("date").defaultNow(),
   checkIn: text("check_in"),
   checkOut: text("check_out"),
+  shift: text("shift"), // auto-detected: 'pagi', 'siang', 'malam'
+  latenessMinutes: integer("lateness_minutes").default(0), // telat berapa menit
+  overtimeMinutes: integer("overtime_minutes").default(0), // lembur berapa menit
   breakDuration: integer("break_duration").default(0), // in minutes
-  overtime: decimal("overtime", { precision: 4, scale: 2 }).default("0"), // in hours
+  overtime: decimal("overtime", { precision: 4, scale: 2 }).default("0"), // in hours (kept for compatibility)
   notes: text("notes"),
   status: text("status").default("pending"), // 'pending', 'approved', 'rejected'
   createdAt: timestamp("created_at").defaultNow(),

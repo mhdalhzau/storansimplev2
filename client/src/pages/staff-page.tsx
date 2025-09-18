@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { detectShift, calculateLateness, calculateOvertime } from "@shared/attendance-utils";
 
 interface ExpenseItem {
   id: string;
@@ -411,11 +412,28 @@ export default function StaffPage() {
       return;
     }
     
-    // Prepare data untuk API
+    // Calculate attendance data
     const selectedStaff = staffUsers.find((user: any) => user.name === selectedStaffName);
+    const shift = detectShift(jamMasuk);
+    const latenessMinutes = calculateLateness(jamMasuk, shift);
+    const overtimeMinutes = calculateOvertime(jamKeluar, shift);
+
+    // Prepare attendance data
+    const attendanceData = {
+      userId: selectedStaff?.id || "",
+      storeId: 1, // Default store, should be dynamic based on user's store
+      checkIn: jamMasuk,
+      checkOut: jamKeluar,
+      shift: shift,
+      latenessMinutes: latenessMinutes,
+      overtimeMinutes: overtimeMinutes,
+    };
+
+    // Prepare data untuk API
     const setoranData = {
       employee_name: employeeName,
       employeeId: selectedStaff?.id || "",
+      attendance: attendanceData, // Include attendance data
       jam_masuk: jamMasuk,
       jam_keluar: jamKeluar,
       nomor_awal: nomorAwal,
@@ -612,6 +630,37 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
                 />
               </div>
             </div>
+
+            {/* Auto-calculated Attendance Info */}
+            {jamMasuk && (
+              <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                <Label className="text-sm font-semibold text-blue-800 dark:text-blue-200">
+                  📊 Info Attendance (Auto Calculated)
+                </Label>
+                <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
+                  <div>
+                    <span className="font-medium">Shift:</span>{" "}
+                    <span className="text-blue-600 dark:text-blue-300">
+                      {detectShift(jamMasuk).toUpperCase()}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-medium">Telat:</span>{" "}
+                    <span className="text-red-600 dark:text-red-400">
+                      {calculateLateness(jamMasuk, detectShift(jamMasuk))} menit
+                    </span>
+                  </div>
+                  {jamKeluar && (
+                    <div>
+                      <span className="font-medium">Lembur:</span>{" "}
+                      <span className="text-green-600 dark:text-green-400">
+                        {calculateOvertime(jamKeluar, detectShift(jamMasuk))} menit
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
