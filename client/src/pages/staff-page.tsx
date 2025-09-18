@@ -896,17 +896,6 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
             <Copy className="h-5 w-5" />
             {saveSetoranMutation.isPending ? "Memproses..." : "Copy + Simpan Data (PU)"}
           </Button>
-          
-          <Button
-            onClick={saveToDatabase}
-            className="w-full flex items-center gap-2 bg-green-600 hover:bg-green-700"
-            size="lg"
-            disabled={saveSetoranMutation.isPending}
-            data-testid="button-save-database"
-          >
-            <Save className="h-5 w-5" />
-            {saveSetoranMutation.isPending ? "Menyimpan..." : "Simpan ke Database"}
-          </Button>
         </div>
       </div>
     </div>
