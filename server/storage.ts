@@ -61,6 +61,7 @@ export interface IStorage {
   getAttendanceByStoreWithEmployees(storeId: number, date?: string): Promise<AttendanceWithEmployee[]>;
   getAttendanceByUser(userId: string): Promise<Attendance[]>;
   createAttendance(attendance: InsertAttendance): Promise<Attendance>;
+  updateAttendance(id: string, data: Partial<InsertAttendance>): Promise<Attendance | undefined>;
   updateAttendanceStatus(id: string, status: string): Promise<Attendance | undefined>;
   
   // Sales methods
@@ -418,6 +419,16 @@ export class MemStorage implements IStorage {
     };
     this.attendanceRecords.set(id, record);
     return record;
+  }
+
+  async updateAttendance(id: string, data: Partial<InsertAttendance>): Promise<Attendance | undefined> {
+    const record = this.attendanceRecords.get(id);
+    if (record) {
+      const updated = { ...record, ...data };
+      this.attendanceRecords.set(id, updated);
+      return updated;
+    }
+    return undefined;
   }
 
   async updateAttendanceStatus(id: string, status: string): Promise<Attendance | undefined> {

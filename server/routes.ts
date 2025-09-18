@@ -122,27 +122,147 @@ export function registerRoutes(app: Express): Server {
         // Staff can see their own attendance across all their assigned stores
         records = await storage.getAttendanceByUser(req.user.id);
       } else {
-        // Get attendance for specific store or user's first store
-        const targetStoreId = storeId ? parseInt(storeId as string) : await getUserFirstStoreId(req.user);
-        
-        if (!targetStoreId) {
-          return res.status(400).json({ message: "Store ID is required" });
-        }
-        
-        // Verify store access
-        if (!(await hasStoreAccess(req.user, targetStoreId))) {
-          return res.status(403).json({ message: "You don't have access to this store" });
-        }
-        
-        // Use method with employee names for managers and administrators
-        if (['manager', 'administrasi'].includes(req.user.role)) {
-          records = await storage.getAttendanceByStoreWithEmployees(targetStoreId, date as string);
+        // For managers/admins, allow getting attendance without specific storeId
+        if (['manager', 'administrasi'].includes(req.user.role) && !storeId) {
+          // Get attendance from all accessible stores
+          const accessibleStoreIds = await getAccessibleStoreIds(req.user);
+          if (accessibleStoreIds.length === 0) {
+            return res.json([]);
+          }
+          
+          const allRecords = [];
+          for (const targetStoreId of accessibleStoreIds) {
+            const storeRecords = await storage.getAttendanceByStoreWithEmployees(targetStoreId, date as string);
+            allRecords.push(...storeRecords);
+          }
+          records = allRecords;
         } else {
-          records = await storage.getAttendanceByStore(targetStoreId, date as string);
+          // Get attendance for specific store or user's first store
+          const targetStoreId = storeId ? parseInt(storeId as string) : await getUserFirstStoreId(req.user);
+          
+          if (!targetStoreId) {
+            return res.status(400).json({ message: "Store ID is required" });
+          }
+          
+          // Verify store access
+          if (!(await hasStoreAccess(req.user, targetStoreId))) {
+            return res.status(403).json({ message: "You don't have access to this store" });
+          }
+          
+          // Use method with employee names for managers and administrators
+          if (['manager', 'administrasi'].includes(req.user.role)) {
+            records = await storage.getAttendanceByStoreWithEmployees(targetStoreId, date as string);
+          } else {
+            records = await storage.getAttendanceByStore(targetStoreId, date as string);
+          }
         }
       }
       
       res.json(records);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Get attendance for specific user
+  app.get("/api/attendance/user/:userId?/:date?", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+      
+      const userId = req.params.userId || req.user.id;
+      const date = req.params.date || req.query.date as string;
+      
+      // Check if user is trying to access someone else's data
+      if (userId !== req.user.id && !['manager', 'administrasi'].includes(req.user.role)) {
+        return res.status(403).json({ message: "You can only access your own attendance" });
+      }
+      
+      // For managers/admins accessing other user's data, verify shared store access
+      if (userId !== req.user.id && req.user.role !== 'administrasi') {
+        const targetUser = await storage.getUser(userId);
+        if (!targetUser) {
+          return res.status(404).json({ message: "User not found" });
+        }
+        
+        const targetUserStores = await storage.getUserStores(targetUser.id);
+        const currentUserStores = await storage.getUserStores(req.user.id);
+        
+        const hasSharedStore = targetUserStores.some(ts => 
+          currentUserStores.some(cs => cs.id === ts.id)
+        );
+        
+        if (!hasSharedStore) {
+          return res.status(403).json({ message: "You don't have access to this user's attendance" });
+        }
+      }
+      
+      // Get all attendance for user
+      const allRecords = await storage.getAttendanceByUser(userId);
+      
+      let records;
+      if (date) {
+        // Filter by specific date
+        records = allRecords.filter(record => {
+          if (!record.date) return false;
+          const recordDate = new Date(record.date).toISOString().split('T')[0];
+          return recordDate === date;
+        });
+      } else {
+        records = allRecords;
+      }
+      
+      res.json(records);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Update attendance
+  app.put("/api/attendance/:id", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+      
+      // Get existing attendance to verify access
+      const existingAttendance = await storage.getAttendance(req.params.id);
+      if (!existingAttendance) {
+        return res.status(404).json({ message: "Attendance record not found" });
+      }
+      
+      // Check permissions - user can update their own, managers/admins can update others
+      if (existingAttendance.userId !== req.user.id && !['manager', 'administrasi'].includes(req.user.role)) {
+        return res.status(403).json({ message: "You can only update your own attendance" });
+      }
+      
+      // For managers updating others' attendance, verify shared store access
+      if (existingAttendance.userId !== req.user.id && req.user.role !== 'administrasi') {
+        const targetUser = await storage.getUser(existingAttendance.userId);
+        if (!targetUser) {
+          return res.status(404).json({ message: "Target user not found" });
+        }
+        
+        const targetUserStores = await storage.getUserStores(targetUser.id);
+        const currentUserStores = await storage.getUserStores(req.user.id);
+        
+        const hasSharedStore = targetUserStores.some(ts => 
+          currentUserStores.some(cs => cs.id === ts.id)
+        );
+        
+        if (!hasSharedStore) {
+          return res.status(403).json({ message: "You don't have access to update this user's attendance" });
+        }
+      }
+      
+      // Validate request data using partial insert schema
+      const updateSchema = insertAttendanceSchema.partial();
+      const validatedData = updateSchema.parse(req.body);
+      
+      // Update the attendance record
+      const updatedAttendance = await storage.updateAttendance(req.params.id, validatedData);
+      if (!updatedAttendance) {
+        return res.status(404).json({ message: "Failed to update attendance record" });
+      }
+      
+      res.json(updatedAttendance);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }
