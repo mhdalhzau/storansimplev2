@@ -596,53 +596,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Get staff users only (accessible by staff themselves)
-  app.get("/api/users/staff", async (req, res) => {
-    try {
-      if (!req.user) {
-        return res.status(401).json({ message: "Unauthorized" });
-      }
-      
-      const users = await storage.getAllUsers();
-      const staffUsers = users.filter(user => user.role === 'staff');
-      res.json(staffUsers);
-    } catch (error: any) {
-      res.status(400).json({ message: error.message });
-    }
-  });
-
-  // Password validation endpoint
-  app.post("/api/validate-password", async (req, res) => {
-    try {
-      if (!req.user) {
-        return res.status(401).json({ message: "Unauthorized" });
-      }
-
-      const { password } = req.body;
-      if (!password) {
-        return res.status(400).json({ message: "Password is required" });
-      }
-
-      // Get current user's stored password from storage
-      const currentUser = await storage.getUser(req.user.id);
-      if (!currentUser) {
-        return res.status(404).json({ message: "User not found" });
-      }
-
-      // Use the comparePasswords function from auth module
-      const { comparePasswords } = await import("./auth");
-      const isValid = await comparePasswords(password, currentUser.password);
-      
-      if (isValid) {
-        res.json({ valid: true, message: "Password validated successfully" });
-      } else {
-        res.status(400).json({ valid: false, message: "Invalid password" });
-      }
-    } catch (error: any) {
-      res.status(400).json({ message: error.message });
-    }
-  });
-
   app.post("/api/users", async (req, res) => {
     try {
       if (!req.user || req.user.role !== 'manager') {

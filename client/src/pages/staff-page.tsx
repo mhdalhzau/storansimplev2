@@ -1,297 +1,942 @@
-import { useState } from "react";
-import { Users, Clock, DollarSign, TrendingUp, Eye, EyeOff } from "lucide-react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { Plus, Minus, Copy, AlertTriangle, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { User } from "@shared/schema";
+import { apiRequest } from "@/lib/queryClient";
 
-interface MenuButton {
+interface ExpenseItem {
   id: string;
-  label: string;
-  icon: React.ReactNode;
-  color: string;
-  accessText: string;
+  description: string;
+  amount: number;
 }
 
-interface PasswordDialogProps {
-  isOpen: boolean;
-  onClose: () => void;
-  selectedMenu: MenuButton | null;
-  onValidate: (password: string) => void;
-  isValidating: boolean;
+interface IncomeItem {
+  id: string;
+  description: string;
+  amount: number;
 }
 
-function PasswordDialog({ isOpen, onClose, selectedMenu, onValidate, isValidating }: PasswordDialogProps) {
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+// Custom Hook untuk validasi input decimal
+const useDecimalInput = (initialValue: number = 0) => {
+  const [value, setValue] = useState<number>(initialValue);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (password.trim()) {
-      onValidate(password);
+  const validateAndCleanInput = useCallback((inputValue: string): string => {
+    let cleanedValue = inputValue;
+    
+    // 1. Pencegahan Input Alfabet
+    cleanedValue = cleanedValue.replace(/[a-zA-Z]/g, '');
+    
+    // 2. Konversi Otomatis: Titik ke koma
+    cleanedValue = cleanedValue.replace(/\./g, ',');
+    
+    // 3. Validasi Ketat: Hanya angka dan koma
+    cleanedValue = cleanedValue.replace(/[^0-9,]/g, '');
+    
+    // 4. Pembatasan Format: Maksimal 3 digit setelah koma
+    const parts = cleanedValue.split(',');
+    if (parts.length > 2) {
+      cleanedValue = parts[0] + ',' + parts[1];
     }
-  };
+    if (parts.length === 2 && parts[1].length > 3) {
+      cleanedValue = parts[0] + ',' + parts[1].substring(0, 3);
+    }
+    
+    return cleanedValue;
+  }, []);
 
-  const handleClose = () => {
-    setPassword("");
-    setShowPassword(false);
-    onClose();
-  };
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const cleanedValue = validateAndCleanInput(e.target.value);
+    
+    if (cleanedValue === '' || cleanedValue === ',') {
+      setValue(0);
+    } else {
+      const numValue = parseFloat(cleanedValue.replace(',', '.'));
+      if (!isNaN(numValue) && numValue >= 0) {
+        setValue(numValue);
+      }
+    }
+  }, [validateAndCleanInput]);
 
-  return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            {selectedMenu?.icon}
-            Akses {selectedMenu?.label}
-          </DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-              Teks untuk disalin:
-            </p>
-            <p className="text-sm font-mono bg-white dark:bg-gray-900 p-2 rounded border">
-              {selectedMenu?.accessText}
-            </p>
-          </div>
-          
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="password">Masukkan Password Anda</Label>
-              <div className="relative">
-                <Input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Password..."
-                  disabled={isValidating}
-                  data-testid="input-password-validation"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="absolute right-0 top-0 h-full px-3"
-                  onClick={() => setShowPassword(!showPassword)}
-                  disabled={isValidating}
-                  data-testid="button-toggle-password"
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </Button>
-              </div>
-            </div>
-            
-            <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleClose}
-                disabled={isValidating}
-                data-testid="button-cancel-password"
-              >
-                Batal
-              </Button>
-              <Button
-                type="submit"
-                disabled={!password.trim() || isValidating}
-                data-testid="button-validate-password"
-              >
-                {isValidating ? "Memvalidasi..." : "Validasi"}
-              </Button>
-            </div>
-          </form>
-        </div>
-      </DialogContent>
-    </Dialog>
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const paste = e.clipboardData?.getData('text') || '';
+    const cleanedPaste = validateAndCleanInput(paste);
+    
+    (e.target as HTMLInputElement).value = cleanedPaste;
+    e.target.dispatchEvent(new Event('input', { bubbles: true }));
+  }, [validateAndCleanInput]);
+
+  const displayValue = useMemo(() => {
+    return value === 0 ? "" : value.toString().replace('.', ',');
+  }, [value]);
+
+  return {
+    value,
+    displayValue,
+    handleChange,
+    handlePaste,
+    setValue
+  };
+};
+
+// Custom Hook untuk manajemen items (expenses/income)
+const useItemsManager = <T extends { id: string; description: string; amount: number }>() => {
+  const [items, setItems] = useState<T[]>([]);
+
+  const addItem = useCallback((newItem: T) => {
+    setItems(prevItems => [...prevItems, newItem]);
+  }, []);
+
+  const removeItem = useCallback((id: string) => {
+    setItems(prevItems => prevItems.filter(item => item.id !== id));
+  }, []);
+
+  const updateItem = useCallback((id: string, field: keyof T, value: string | number) => {
+    setItems(prevItems => 
+      prevItems.map(item => 
+        item.id === id ? { ...item, [field]: value } : item
+      )
+    );
+  }, []);
+
+  const validItems = useMemo(() => 
+    items.filter(item => item.description.trim() && item.amount > 0), 
+    [items]
   );
-}
+
+  const incompleteItems = useMemo(() => 
+    items.filter(item => 
+      (item.description.trim() && item.amount <= 0) || 
+      (!item.description.trim() && item.amount > 0)
+    ), 
+    [items]
+  );
+
+  const total = useMemo(() => 
+    validItems.reduce((sum, item) => sum + item.amount, 0), 
+    [validItems]
+  );
+
+  return {
+    items,
+    validItems,
+    incompleteItems,
+    total,
+    addItem,
+    removeItem,
+    updateItem,
+    hasIncomplete: incompleteItems.length > 0
+  };
+};
 
 export default function StaffPage() {
   const { toast } = useToast();
-  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
-  const [selectedMenu, setSelectedMenu] = useState<MenuButton | null>(null);
+  const [currentDate, setCurrentDate] = useState("");
   
-  // Query untuk fetch staff users only
-  const { data: staffUsers = [], isLoading: isLoadingStaff } = useQuery({
-    queryKey: ['/api/users/staff'],
+  // Query untuk fetch all users
+  const { data: users = [], isLoading: isLoadingUsers } = useQuery({
+    queryKey: ['/api/users'],
     queryFn: async () => {
-      const response = await apiRequest('GET', '/api/users/staff');
+      const response = await apiRequest('GET', '/api/users');
       return response.json();
     },
   });
 
-  // Password validation mutation
-  const validatePasswordMutation = useMutation({
-    mutationFn: async (password: string) => {
-      const response = await apiRequest('POST', '/api/validate-password', { password });
-      return response.json();
+  // Single endpoint submission (server handles all related records)
+  const submitDataMutation = useMutation({
+    mutationFn: async (data: any) => {
+      // Send all data to setoran endpoint - server will handle attendance, sales, cashflow creation
+      const setoranResponse = await apiRequest('POST', '/api/setoran', data);
+      return setoranResponse.json();
     },
-    onSuccess: (data) => {
-      if (data.valid) {
-        toast({
-          title: "✅ Password Valid",
-          description: `Akses ke ${selectedMenu?.label} berhasil`,
-          variant: "default",
-        });
-        setShowPasswordDialog(false);
-        // Handle successful access here - could redirect or show content
-      }
+    onSuccess: () => {
+      toast({
+        title: "✅ Berhasil Disimpan",
+        description: "Data berhasil disimpan ke attendance, sales, cashflow, dan setoran",
+        variant: "default",
+      });
+      
+      // Reset form setelah berhasil save
+      setSelectedStaffId("");
+      setEmployeeName("");
+      setJamMasuk("");
+      setJamKeluar("");
+      setNomorAwal(0);
+      setNomorAkhir(0);
+      setQrisSetoran(0);
+      setExpenses([]);
+      setIncome([]);
     },
     onError: (error: any) => {
       toast({
-        title: "❌ Password Salah",
-        description: "Password yang Anda masukkan tidak benar",
+        title: "❌ Gagal Menyimpan",
+        description: `Error: ${error.message}`,
         variant: "destructive",
       });
     },
   });
   
-  // Menu buttons configuration
-  const menuButtons: MenuButton[] = [
-    {
-      id: "attendance",
-      label: "Absensi",
-      icon: <Clock className="h-6 w-6" />,
-      color: "bg-blue-500 hover:bg-blue-600",
-      accessText: "Akses menu absensi untuk melihat dan mengelola data kehadiran karyawan"
-    },
-    {
-      id: "cashflow",
-      label: "Cashflow",
-      icon: <DollarSign className="h-6 w-6" />,
-      color: "bg-green-500 hover:bg-green-600",
-      accessText: "Akses menu cashflow untuk melihat dan mengelola arus kas harian"
-    },
-    {
-      id: "sales",
-      label: "Sales Reports",
-      icon: <TrendingUp className="h-6 w-6" />,
-      color: "bg-purple-500 hover:bg-purple-600",
-      accessText: "Akses menu laporan penjualan untuk melihat data dan analisis penjualan"
-    }
-  ];
+  // Form data
+  const [selectedStaffId, setSelectedStaffId] = useState("");
+  const [employeeName, setEmployeeName] = useState("");
+  const [jamMasuk, setJamMasuk] = useState("");
+  const [jamKeluar, setJamKeluar] = useState("");
+  const [nomorAwal, setNomorAwal] = useState(0);
+  const [nomorAkhir, setNomorAkhir] = useState(0);
+  const [nomorAwalText, setNomorAwalText] = useState("");
+  const [nomorAkhirText, setNomorAkhirText] = useState("");
+  const [qrisSetoran, setQrisSetoran] = useState(0);
+  const [expenses, setExpenses] = useState<ExpenseItem[]>([]);
+  const [income, setIncome] = useState<IncomeItem[]>([]);
 
-  const handleMenuClick = (menu: MenuButton) => {
-    setSelectedMenu(menu);
-    setShowPasswordDialog(true);
+  // Handle staff selection
+  const handleStaffSelect = (staffId: string) => {
+    setSelectedStaffId(staffId);
+    const selectedStaff = users.find((user: any) => user.id === staffId);
+    if (selectedStaff) {
+      setEmployeeName(selectedStaff.name);
+    }
   };
 
-  const handlePasswordValidation = (password: string) => {
-    validatePasswordMutation.mutate(password);
+  // Calculations
+  const totalLiter = Math.max(0, nomorAkhir - nomorAwal); // Prevent negative liter
+  const totalSetoran = totalLiter * 11500; // Total = Total Liter × 11500
+  const cashSetoran = Math.max(0, totalSetoran - qrisSetoran); // Cash = Total - QRIS, prevent negative
+  
+  // Only count valid items (with description and amount > 0)
+  const validExpenses = expenses.filter(item => 
+    item.description.trim() && 
+    item.amount > 0
+  );
+  const validIncome = income.filter(item => 
+    item.description.trim() && 
+    item.amount > 0
+  );
+  const totalExpenses = validExpenses.reduce((sum, item) => sum + Number(item.amount), 0);
+  const totalIncome = validIncome.reduce((sum, item) => sum + Number(item.amount), 0);
+  const totalKeseluruhan = cashSetoran + totalIncome - totalExpenses; // Cash + Pemasukan - Pengeluaran
+  
+  // Validasi untuk enable/disable button
+  const isDataComplete = (
+    selectedStaffId.trim() !== '' &&
+    jamMasuk !== '' &&
+    jamKeluar !== '' &&
+    nomorAwal > 0 &&
+    nomorAkhir > nomorAwal
+  );
+
+  // Check for incomplete entries (partially filled forms)
+  const incompleteExpenses = expenses.filter(item => 
+    (item.description.trim() && item.amount <= 0) || (!item.description.trim() && item.amount > 0)
+  );
+  const incompleteIncome = income.filter(item => 
+    (item.description.trim() && item.amount <= 0) || (!item.description.trim() && item.amount > 0)
+  );
+  const hasIncompleteExpenses = incompleteExpenses.length > 0;
+  const hasIncompleteIncome = incompleteIncome.length > 0;
+
+  useEffect(() => {
+    const today = new Date();
+    const options: Intl.DateTimeFormatOptions = { 
+      weekday: 'long', 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    };
+    setCurrentDate(today.toLocaleDateString('id-ID', options));
+  }, []);
+
+  const addExpenseItem = () => {
+    // Validasi - cek apakah semua item sudah diisi
+    const hasEmptyFields = expenses.some(item => !item.description.trim() || item.amount <= 0);
+    
+    if (hasEmptyFields) {
+      toast({
+        title: "Data Belum Lengkap",
+        description: "Lengkapi semua field pengeluaran sebelum menambah item baru",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const newItem: ExpenseItem = {
+      id: Date.now().toString(),
+      description: "",
+      amount: 0
+    };
+    setExpenses([...expenses, newItem]);
+  };
+
+  const removeExpenseItem = (id: string) => {
+    setExpenses(expenses.filter(item => item.id !== id));
+  };
+
+  const updateExpenseItem = (id: string, field: keyof ExpenseItem, value: string | number) => {
+    setExpenses(expenses.map(item => 
+      item.id === id ? { ...item, [field]: value } : item
+    ));
+  };
+
+  const addIncomeItem = () => {
+    // Validasi - cek apakah semua item sudah diisi
+    const hasEmptyFields = income.some(item => !item.description.trim() || item.amount <= 0);
+    
+    if (hasEmptyFields) {
+      toast({
+        title: "Data Belum Lengkap",
+        description: "Lengkapi semua field pemasukan sebelum menambah item baru",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const newItem: IncomeItem = {
+      id: Date.now().toString(),
+      description: "",
+      amount: 0
+    };
+    setIncome([...income, newItem]);
+  };
+
+  const removeIncomeItem = (id: string) => {
+    setIncome(income.filter(item => item.id !== id));
+  };
+
+  const updateIncomeItem = (id: string, field: keyof IncomeItem, value: string | number) => {
+    setIncome(income.map(item => 
+      item.id === id ? { ...item, [field]: value } : item
+    ));
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+      currencyDisplay: 'symbol'
+    }).format(amount);
+  };
+
+  const formatNumber = (amount: number) => {
+    return new Intl.NumberFormat('id-ID').format(amount);
+  };
+
+  const saveToDatabase = async () => {
+    // Validasi form
+    if (!selectedStaffId.trim()) {
+      toast({
+        title: "❌ Data Tidak Lengkap",
+        description: "Nama staff harus dipilih",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (!jamMasuk || !jamKeluar) {
+      toast({
+        title: "❌ Data Tidak Lengkap", 
+        description: "Jam masuk dan jam keluar harus diisi",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (nomorAkhir <= nomorAwal) {
+      toast({
+        title: "❌ Data Tidak Valid",
+        description: "Nomor akhir harus lebih besar dari nomor awal",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Cek jika ada incomplete items
+    if (hasIncompleteExpenses || hasIncompleteIncome) {
+      toast({
+        title: "❌ Data Tidak Lengkap",
+        description: "Harap lengkapi atau hapus item yang belum diisi dengan sempurna",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Prepare data untuk API
+    const setoranData = {
+      employee_name: employeeName,
+      employeeId: selectedStaffId,
+      jam_masuk: jamMasuk,
+      jam_keluar: jamKeluar,
+      nomor_awal: nomorAwal,
+      nomor_akhir: nomorAkhir,
+      qris_setoran: qrisSetoran,
+      total_liter: totalLiter,
+      total_setoran: totalSetoran,
+      cash_setoran: cashSetoran,
+      total_expenses: totalExpenses,
+      total_income: totalIncome,
+      total_keseluruhan: totalKeseluruhan,
+      validExpenses: validExpenses,
+      validIncome: validIncome,
+      expenses: validExpenses,
+      income: validIncome
+    };
+    
+    // Save ke database
+    submitDataMutation.mutate(setoranData);
+  };
+
+  // Fungsi gabungan: Copy ke clipboard + Auto save ke database
+  const copyAndSave = async () => {
+    // Validasi awal
+    if (!isDataComplete) {
+      toast({
+        title: "❌ Data Tidak Lengkap",
+        description: "Lengkapi nama staff, jam kerja, dan data meter terlebih dahulu",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // 1. Copy ke clipboard
+      let reportText = `
+Setoran Harian 📋
+${currentDate}
+
+🤷‍♂️ Role Karyawan: ${employeeName}
+
+🕐 Jam Kerja:
+Jam Masuk: ${jamMasuk}
+Jam Keluar: ${jamKeluar}
+
+⛽ Data Meter:
+Nomor Awal: ${nomorAwal}
+Nomor Akhir: ${nomorAkhir}
+Total Liter: ${totalLiter.toFixed(2)} L
+
+💰 Setoran:
+Cash: ${formatCurrency(cashSetoran)}
+QRIS: ${formatCurrency(qrisSetoran)}
+Total: ${formatCurrency(totalSetoran)}`;
+
+      // Tambahkan bagian pengeluaran hanya jika ada data (pu) yang digunakan
+      if (validExpenses.length > 0) {
+        reportText += `
+
+💸 Pengeluaran (PU):
+${validExpenses.map(item => `- ${item.description}: ${formatCurrency(item.amount)}`).join('\n')}
+Total Pengeluaran: ${formatCurrency(totalExpenses)}`;
+      }
+
+      // Tambahkan bagian pemasukan hanya jika ada data (pu) yang digunakan
+      if (validIncome.length > 0) {
+        reportText += `
+
+💵 Pemasukan (PU):
+${validIncome.map(item => `- ${item.description}: ${formatCurrency(item.amount)}`).join('\n')}
+Total Pemasukan: ${formatCurrency(totalIncome)}`;
+      }
+
+      // Total keseluruhan
+      reportText += `
+
+💼 Total Keseluruhan: ${formatCurrency(totalKeseluruhan)}
+Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)} - Pengeluaran: ${formatCurrency(totalExpenses)}`;
+
+      reportText = reportText.trim();
+
+      await navigator.clipboard.writeText(reportText);
+      
+      // 2. Save ke database
+      const setoranData = {
+        employee_name: employeeName,
+        jam_masuk: jamMasuk,
+        jam_keluar: jamKeluar,
+        nomor_awal: nomorAwal,
+        nomor_akhir: nomorAkhir,
+        qris_setoran: qrisSetoran,
+        expenses: validExpenses,
+        income: validIncome
+      };
+      
+      submitDataMutation.mutate(setoranData);
+      
+      toast({
+        title: "✅ Berhasil!",
+        description: "Data disalin ke clipboard dan disimpan ke database",
+      });
+      
+    } catch (error) {
+      toast({
+        title: "❌ Error",
+        description: "Gagal menyalin ke clipboard",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900 p-4">
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-2xl mx-auto space-y-6">
         {/* Header */}
         <div className="text-center space-y-2">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center justify-center gap-2">
-            <Users className="h-8 w-8" />
-            Halaman Staff
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+            Setoran Harian 📋
           </h1>
           <p className="text-lg text-gray-600 dark:text-gray-400">
-            Daftar Staff dan Menu Akses
+            {currentDate}
           </p>
         </div>
 
-        {/* Menu Buttons */}
+        {/* Staff Selection */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-              Menu Akses Staff
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {menuButtons.map((menu) => (
-                <Button
-                  key={menu.id}
-                  onClick={() => handleMenuClick(menu)}
-                  className={`${menu.color} text-white h-24 flex flex-col items-center justify-center gap-2 transition-all duration-200 transform hover:scale-105`}
-                  data-testid={`button-menu-${menu.id}`}
-                >
-                  {menu.icon}
-                  <span className="font-medium">{menu.label}</span>
-                </Button>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Staff List */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5" />
-              Daftar Staff
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoadingStaff ? (
-              <div className="text-center py-8 text-gray-500">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
-                Loading staff data...
-              </div>
-            ) : staffUsers.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <Users className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p>Tidak ada data staff ditemukan</p>
-              </div>
+          <CardContent className="pt-6">
+            <Label className="text-lg font-semibold flex items-center gap-2">
+              👤 Nama Staff
+            </Label>
+            {isLoadingUsers ? (
+              <div className="mt-2 text-gray-500">Loading staff...</div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {staffUsers.map((staff: User) => (
-                  <div
-                    key={staff.id}
-                    className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:shadow-md transition-shadow"
-                    data-testid={`card-staff-${staff.id}`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
-                        <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="font-medium text-gray-900 dark:text-white" data-testid={`text-staff-name-${staff.id}`}>
-                          {staff.name}
-                        </h3>
-                        <p className="text-sm text-gray-500 dark:text-gray-400" data-testid={`text-staff-email-${staff.id}`}>
-                          {staff.email}
-                        </p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                            {staff.role}
-                          </span>
-                          {staff.storeId && (
-                            <span className="text-xs text-gray-500 dark:text-gray-400">
-                              Store {staff.storeId}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+              <select
+                value={selectedStaffId}
+                onChange={(e) => handleStaffSelect(e.target.value)}
+                className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                data-testid="select-staff-name"
+              >
+                <option value="">Pilih Nama Staff</option>
+                {users.map((user: any) => (
+                  <option key={user.id} value={user.id}>
+                    {user.name} ({user.role})
+                  </option>
                 ))}
-              </div>
+              </select>
             )}
           </CardContent>
         </Card>
 
-        {/* Password Dialog */}
-        <PasswordDialog
-          isOpen={showPasswordDialog}
-          onClose={() => setShowPasswordDialog(false)}
-          selectedMenu={selectedMenu}
-          onValidate={handlePasswordValidation}
-          isValidating={validatePasswordMutation.isPending}
-        />
+        {/* Working Hours */}
+        <Card>
+          <CardContent className="pt-6">
+            <Label className="text-lg font-semibold flex items-center gap-2 mb-4">
+              🕐 Jam Kerja
+            </Label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label>Jam Masuk</Label>
+                <Input
+                  type="time"
+                  value={jamMasuk}
+                  onChange={(e) => setJamMasuk(e.target.value)}
+                  data-testid="input-jam-masuk"
+                />
+              </div>
+              <div>
+                <Label>Jam Keluar</Label>
+                <Input
+                  type="time"
+                  value={jamKeluar}
+                  onChange={(e) => setJamKeluar(e.target.value)}
+                  data-testid="input-jam-keluar"
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Meter Data */}
+        <Card>
+          <CardContent className="pt-6">
+            <Label className="text-lg font-semibold flex items-center gap-2 mb-4">
+              ⛽ Data Meter
+            </Label>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <Label>Nomor Awal (Liter)</Label>
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="Contoh: 1234,567"
+                  value={nomorAwalText}
+                  onChange={(e) => {
+                    let value = e.target.value;
+                    
+                    // 1. Pencegahan Input Alfabet: Hapus semua karakter alfabet
+                    value = value.replace(/[a-zA-Z]/g, '');
+                    
+                    // 2. Konversi Otomatis: Titik (.) otomatis diubah menjadi koma (,)
+                    value = value.replace(/\./g, ',');
+                    
+                    // 3. Validasi Ketat: Hanya menerima digit angka (0-9) dan koma (,)
+                    value = value.replace(/[^0-9,]/g, '');
+                    
+                    // 4. Pembatasan Format: Maksimal 3 digit di belakang koma
+                    const parts = value.split(',');
+                    if (parts.length > 2) {
+                      // Jika ada lebih dari satu koma, ambil yang pertama saja
+                      value = parts[0] + ',' + parts[1];
+                    }
+                    if (parts.length === 2 && parts[1].length > 3) {
+                      // Batasi maksimal 3 digit setelah koma
+                      value = parts[0] + ',' + parts[1].substring(0, 3);
+                    }
+                    
+                    // Update text state (preserves what user is typing)
+                    setNomorAwalText(value);
+                    
+                    // Update numeric state for calculations
+                    if (value === '' || value === ',') {
+                      setNomorAwal(0);
+                    } else {
+                      // Convert Indonesian format (comma) to JavaScript decimal (dot)
+                      const numValue = parseFloat(value.replace(',', '.'));
+                      if (!isNaN(numValue) && numValue >= 0) {
+                        setNomorAwal(numValue);
+                      }
+                    }
+                  }}
+                  onPaste={(e) => {
+                    // 5. Pencegahan Paste: Mencegah pengguna menempelkan teks yang mengandung huruf
+                    e.preventDefault();
+                    const paste = e.clipboardData?.getData('text') || '';
+                    let cleanedPaste = paste
+                      .replace(/[a-zA-Z]/g, '') // Hapus alfabet
+                      .replace(/\./g, ',') // Konversi titik ke koma
+                      .replace(/[^0-9,]/g, ''); // Hanya angka dan koma
+                    
+                    // Batasi format koma
+                    const parts = cleanedPaste.split(',');
+                    if (parts.length > 2) {
+                      cleanedPaste = parts[0] + ',' + parts[1];
+                    }
+                    if (parts.length === 2 && parts[1].length > 3) {
+                      cleanedPaste = parts[0] + ',' + parts[1].substring(0, 3);
+                    }
+                    
+                    // Update text state directly
+                    setNomorAwalText(cleanedPaste);
+                    
+                    // Update numeric state for calculations
+                    if (cleanedPaste === '' || cleanedPaste === ',') {
+                      setNomorAwal(0);
+                    } else {
+                      const numValue = parseFloat(cleanedPaste.replace(',', '.'));
+                      if (!isNaN(numValue) && numValue >= 0) {
+                        setNomorAwal(numValue);
+                      }
+                    }
+                  }}
+                  data-testid="input-nomor-awal"
+                />
+              </div>
+              <div>
+                <Label>Nomor Akhir (Liter)</Label>
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="Contoh: 1567,234"
+                  value={nomorAkhirText}
+                  onChange={(e) => {
+                    let value = e.target.value;
+                    
+                    // 1. Pencegahan Input Alfabet: Hapus semua karakter alfabet
+                    value = value.replace(/[a-zA-Z]/g, '');
+                    
+                    // 2. Konversi Otomatis: Titik (.) otomatis diubah menjadi koma (,)
+                    value = value.replace(/\./g, ',');
+                    
+                    // 3. Validasi Ketat: Hanya menerima digit angka (0-9) dan koma (,)
+                    value = value.replace(/[^0-9,]/g, '');
+                    
+                    // 4. Pembatasan Format: Maksimal 3 digit di belakang koma
+                    const parts = value.split(',');
+                    if (parts.length > 2) {
+                      // Jika ada lebih dari satu koma, ambil yang pertama saja
+                      value = parts[0] + ',' + parts[1];
+                    }
+                    if (parts.length === 2 && parts[1].length > 3) {
+                      // Batasi maksimal 3 digit setelah koma
+                      value = parts[0] + ',' + parts[1].substring(0, 3);
+                    }
+                    
+                    // Update text state (preserves what user is typing)
+                    setNomorAkhirText(value);
+                    
+                    // Update numeric state for calculations
+                    if (value === '' || value === ',') {
+                      setNomorAkhir(0);
+                    } else {
+                      // Convert Indonesian format (comma) to JavaScript decimal (dot)
+                      const numValue = parseFloat(value.replace(',', '.'));
+                      if (!isNaN(numValue) && numValue >= 0) {
+                        setNomorAkhir(numValue);
+                      }
+                    }
+                  }}
+                  onPaste={(e) => {
+                    // 5. Pencegahan Paste: Mencegah pengguna menempelkan teks yang mengandung huruf
+                    e.preventDefault();
+                    const paste = e.clipboardData?.getData('text') || '';
+                    let cleanedPaste = paste
+                      .replace(/[a-zA-Z]/g, '') // Hapus alfabet
+                      .replace(/\./g, ',') // Konversi titik ke koma
+                      .replace(/[^0-9,]/g, ''); // Hanya angka dan koma
+                    
+                    // Batasi format koma
+                    const parts = cleanedPaste.split(',');
+                    if (parts.length > 2) {
+                      cleanedPaste = parts[0] + ',' + parts[1];
+                    }
+                    if (parts.length === 2 && parts[1].length > 3) {
+                      cleanedPaste = parts[0] + ',' + parts[1].substring(0, 3);
+                    }
+                    
+                    // Update text state directly
+                    setNomorAkhirText(cleanedPaste);
+                    
+                    // Update numeric state for calculations
+                    if (cleanedPaste === '' || cleanedPaste === ',') {
+                      setNomorAkhir(0);
+                    } else {
+                      const numValue = parseFloat(cleanedPaste.replace(',', '.'));
+                      if (!isNaN(numValue) && numValue >= 0) {
+                        setNomorAkhir(numValue);
+                      }
+                    }
+                  }}
+                  data-testid="input-nomor-akhir"
+                />
+              </div>
+              <div>
+                <Label>Total Liter</Label>
+                <Input
+                  value={`${totalLiter.toFixed(2)} L`}
+                  readOnly
+                  className="bg-black text-white font-semibold cursor-default"
+                  data-testid="display-total-liter"
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Setoran */}
+        <Card>
+          <CardContent className="pt-6">
+            <Label className="text-lg font-semibold flex items-center gap-2 mb-4">
+              💰 Setoran
+            </Label>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <Label>Cash</Label>
+                <div className="flex items-center gap-2">
+                  <span>Rp</span>
+                  <Input
+                    value={formatNumber(cashSetoran)}
+                    readOnly
+                    className="bg-gray-50 cursor-default"
+                    data-testid="display-cash-setoran"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label>QRIS</Label>
+                <div className="flex items-center gap-2">
+                  <span>Rp</span>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={qrisSetoran || ""}
+                    onChange={(e) => setQrisSetoran(Math.max(0, Number(e.target.value) || 0))}
+                    data-testid="input-qris-setoran"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label>Total</Label>
+                <div className="flex items-center gap-2">
+                  <span>Rp</span>
+                  <div className="relative">
+                    <Input
+                      value={formatNumber(totalSetoran)}
+                      readOnly
+                      className="pr-10 bg-green-50 cursor-default"
+                      data-testid="display-total-setoran"
+                    />
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+                      <span className="text-white text-xs">✓</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Expenses */}
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between mb-4">
+              <Label className="text-lg font-semibold flex items-center gap-2">
+                💸 Pengeluaran (PU)
+              </Label>
+              <Button
+                onClick={addExpenseItem}
+                size="sm"
+                className="flex items-center gap-2"
+                data-testid="button-add-expense"
+              >
+                <Plus className="h-4 w-4" />
+                Tambah Item
+              </Button>
+            </div>
+            
+            {/* Reminder for incomplete expenses */}
+            {hasIncompleteExpenses && (
+              <Alert className="mb-4 border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20">
+                <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                <AlertDescription className="text-yellow-800 dark:text-yellow-200">
+                  ⚠️ <strong>Reminder:</strong> Ada {incompleteExpenses.length} item pengeluaran yang belum lengkap. 
+                  Silakan <strong>lengkapi semua field</strong> atau <strong>hapus item</strong> yang tidak digunakan 
+                  dengan tombol <Minus className="h-3 w-3 inline mx-1" /> merah.
+                </AlertDescription>
+              </Alert>
+            )}
+            <div className="space-y-3">
+              {expenses.map((item) => (
+                <div key={item.id} className="flex items-center gap-2">
+                  <Input
+                    placeholder="Deskripsi"
+                    value={item.description}
+                    onChange={(e) => updateExpenseItem(item.id, 'description', e.target.value)}
+                    className="flex-1"
+                  />
+                  <div className="flex items-center gap-1">
+                    <span>Rp</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={item.amount || ""}
+                      onChange={(e) => updateExpenseItem(item.id, 'amount', Math.max(0, Number(e.target.value) || 0))}
+                      className="w-32"
+                    />
+                  </div>
+                  <Button
+                    onClick={() => removeExpenseItem(item.id)}
+                    size="sm"
+                    variant="destructive"
+                  >
+                    <Minus className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <div className="text-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg mt-4">
+              <Label className="text-lg font-semibold">
+                Total Pengeluaran: {formatCurrency(totalExpenses)}
+              </Label>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Income */}
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between mb-4">
+              <Label className="text-lg font-semibold flex items-center gap-2">
+                💵 Pemasukan (PU)
+              </Label>
+              <Button
+                onClick={addIncomeItem}
+                size="sm"
+                className="flex items-center gap-2"
+                data-testid="button-add-income"
+              >
+                <Plus className="h-4 w-4" />
+                Tambah Item
+              </Button>
+            </div>
+            
+            {/* Reminder for incomplete income */}
+            {hasIncompleteIncome && (
+              <Alert className="mb-4 border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20">
+                <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                <AlertDescription className="text-yellow-800 dark:text-yellow-200">
+                  ⚠️ <strong>Reminder:</strong> Ada {incompleteIncome.length} item pemasukan yang belum lengkap. 
+                  Silakan <strong>lengkapi semua field</strong> atau <strong>hapus item</strong> yang tidak digunakan 
+                  dengan tombol <Minus className="h-3 w-3 inline mx-1" /> merah.
+                </AlertDescription>
+              </Alert>
+            )}
+            <div className="space-y-3">
+              {income.map((item) => (
+                <div key={item.id} className="flex items-center gap-2">
+                  <Input
+                    placeholder="Deskripsi"
+                    value={item.description}
+                    onChange={(e) => updateIncomeItem(item.id, 'description', e.target.value)}
+                    className="flex-1"
+                  />
+                  <div className="flex items-center gap-1">
+                    <span>Rp</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={item.amount || ""}
+                      onChange={(e) => updateIncomeItem(item.id, 'amount', Math.max(0, Number(e.target.value) || 0))}
+                      className="w-32"
+                    />
+                  </div>
+                  <Button
+                    onClick={() => removeIncomeItem(item.id)}
+                    size="sm"
+                    variant="destructive"
+                  >
+                    <Minus className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <div className="text-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg mt-4">
+              <Label className="text-lg font-semibold">
+                Total Pemasukan: {formatCurrency(totalIncome)}
+              </Label>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Total Overall */}
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center space-y-2">
+              <Label className="text-xl font-bold flex items-center justify-center gap-2">
+                💼 Total Keseluruhan: {formatCurrency(totalKeseluruhan)}
+              </Label>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Cash: {formatCurrency(cashSetoran)} + Pemasukan: {formatCurrency(totalIncome)} - Pengeluaran: {formatCurrency(totalExpenses)}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Save and Copy Buttons */}
+        <div className="space-y-3">
+          <Button
+            onClick={copyAndSave}
+            className="w-full flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
+            size="lg"
+            disabled={!isDataComplete || submitDataMutation.isPending}
+            data-testid="button-copy-and-save"
+          >
+            <Copy className="h-5 w-5" />
+            {submitDataMutation.isPending ? "Memproses..." : "Copy + Simpan Data (PU)"}
+          </Button>
+        </div>
       </div>
     </div>
   );
