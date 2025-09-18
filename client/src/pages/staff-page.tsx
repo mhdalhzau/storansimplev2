@@ -252,23 +252,32 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
                 <Input
                   type="text"
                   inputMode="decimal"
-                  placeholder="Contoh: 1234,56"
+                  placeholder="Contoh: 1234,567"
                   value={nomorAwal === 0 ? "" : nomorAwal.toString().replace('.', ',')}
                   onChange={(e) => {
                     let value = e.target.value;
                     
-                    // Allow both . and , as decimal separator initially
+                    // 1. Pencegahan Input Alfabet: Hapus semua karakter alfabet
+                    value = value.replace(/[a-zA-Z]/g, '');
+                    
+                    // 2. Konversi Otomatis: Titik (.) otomatis diubah menjadi koma (,)
                     value = value.replace(/\./g, ',');
                     
-                    // Only allow numbers and one comma
+                    // 3. Validasi Ketat: Hanya menerima digit angka (0-9) dan koma (,)
                     value = value.replace(/[^0-9,]/g, '');
                     
-                    // Ensure only one comma is allowed
+                    // 4. Pembatasan Format: Maksimal 3 digit di belakang koma
                     const parts = value.split(',');
                     if (parts.length > 2) {
-                      value = parts[0] + ',' + parts.slice(1).join('');
+                      // Jika ada lebih dari satu koma, ambil yang pertama saja
+                      value = parts[0] + ',' + parts[1];
+                    }
+                    if (parts.length === 2 && parts[1].length > 3) {
+                      // Batasi maksimal 3 digit setelah koma
+                      value = parts[0] + ',' + parts[1].substring(0, 3);
                     }
                     
+                    // Update state
                     if (value === '' || value === ',') {
                       setNomorAwal(0);
                     } else {
@@ -279,6 +288,28 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
                       }
                     }
                   }}
+                  onPaste={(e) => {
+                    // 5. Pencegahan Paste: Mencegah pengguna menempelkan teks yang mengandung huruf
+                    e.preventDefault();
+                    const paste = e.clipboardData?.getData('text') || '';
+                    let cleanedPaste = paste
+                      .replace(/[a-zA-Z]/g, '') // Hapus alfabet
+                      .replace(/\./g, ',') // Konversi titik ke koma
+                      .replace(/[^0-9,]/g, ''); // Hanya angka dan koma
+                    
+                    // Batasi format koma
+                    const parts = cleanedPaste.split(',');
+                    if (parts.length > 2) {
+                      cleanedPaste = parts[0] + ',' + parts[1];
+                    }
+                    if (parts.length === 2 && parts[1].length > 3) {
+                      cleanedPaste = parts[0] + ',' + parts[1].substring(0, 3);
+                    }
+                    
+                    // Trigger onChange dengan nilai yang sudah dibersihkan
+                    (e.target as HTMLInputElement).value = cleanedPaste;
+                    e.target.dispatchEvent(new Event('input', { bubbles: true }));
+                  }}
                   data-testid="input-nomor-awal"
                 />
               </div>
@@ -287,23 +318,32 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
                 <Input
                   type="text"
                   inputMode="decimal"
-                  placeholder="Contoh: 1567,23"
+                  placeholder="Contoh: 1567,234"
                   value={nomorAkhir === 0 ? "" : nomorAkhir.toString().replace('.', ',')}
                   onChange={(e) => {
                     let value = e.target.value;
                     
-                    // Allow both . and , as decimal separator initially
+                    // 1. Pencegahan Input Alfabet: Hapus semua karakter alfabet
+                    value = value.replace(/[a-zA-Z]/g, '');
+                    
+                    // 2. Konversi Otomatis: Titik (.) otomatis diubah menjadi koma (,)
                     value = value.replace(/\./g, ',');
                     
-                    // Only allow numbers and one comma
+                    // 3. Validasi Ketat: Hanya menerima digit angka (0-9) dan koma (,)
                     value = value.replace(/[^0-9,]/g, '');
                     
-                    // Ensure only one comma is allowed
+                    // 4. Pembatasan Format: Maksimal 3 digit di belakang koma
                     const parts = value.split(',');
                     if (parts.length > 2) {
-                      value = parts[0] + ',' + parts.slice(1).join('');
+                      // Jika ada lebih dari satu koma, ambil yang pertama saja
+                      value = parts[0] + ',' + parts[1];
+                    }
+                    if (parts.length === 2 && parts[1].length > 3) {
+                      // Batasi maksimal 3 digit setelah koma
+                      value = parts[0] + ',' + parts[1].substring(0, 3);
                     }
                     
+                    // Update state
                     if (value === '' || value === ',') {
                       setNomorAkhir(0);
                     } else {
@@ -313,6 +353,28 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
                         setNomorAkhir(numValue);
                       }
                     }
+                  }}
+                  onPaste={(e) => {
+                    // 5. Pencegahan Paste: Mencegah pengguna menempelkan teks yang mengandung huruf
+                    e.preventDefault();
+                    const paste = e.clipboardData?.getData('text') || '';
+                    let cleanedPaste = paste
+                      .replace(/[a-zA-Z]/g, '') // Hapus alfabet
+                      .replace(/\./g, ',') // Konversi titik ke koma
+                      .replace(/[^0-9,]/g, ''); // Hanya angka dan koma
+                    
+                    // Batasi format koma
+                    const parts = cleanedPaste.split(',');
+                    if (parts.length > 2) {
+                      cleanedPaste = parts[0] + ',' + parts[1];
+                    }
+                    if (parts.length === 2 && parts[1].length > 3) {
+                      cleanedPaste = parts[0] + ',' + parts[1].substring(0, 3);
+                    }
+                    
+                    // Trigger onChange dengan nilai yang sudah dibersihkan
+                    (e.target as HTMLInputElement).value = cleanedPaste;
+                    e.target.dispatchEvent(new Event('input', { bubbles: true }));
                   }}
                   data-testid="input-nomor-akhir"
                 />
