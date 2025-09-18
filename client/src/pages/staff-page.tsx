@@ -188,11 +188,29 @@ export default function StaffPage() {
   const cashSetoran = Math.max(0, totalSetoran - qrisSetoran); // Cash = Total - QRIS, prevent negative
   
   // Only count valid items (with description and amount > 0)
-  const validExpenses = expenses.filter(item => item.description.trim() && item.amount > 0);
-  const validIncome = income.filter(item => item.description.trim() && item.amount > 0);
+  // Filter hanya item yang mengandung "(pu)" untuk copy dan save
+  const validExpenses = expenses.filter(item => 
+    item.description.trim() && 
+    item.amount > 0 && 
+    item.description.toLowerCase().includes('(pu)')
+  );
+  const validIncome = income.filter(item => 
+    item.description.trim() && 
+    item.amount > 0 && 
+    item.description.toLowerCase().includes('(pu)')
+  );
   const totalExpenses = validExpenses.reduce((sum, item) => sum + item.amount, 0);
   const totalIncome = validIncome.reduce((sum, item) => sum + item.amount, 0);
   const totalKeseluruhan = cashSetoran + totalIncome - totalExpenses; // Cash + Pemasukan - Pengeluaran
+  
+  // Validasi untuk enable/disable button
+  const isDataComplete = (
+    employeeName.trim() !== '' &&
+    jamMasuk !== '' &&
+    jamKeluar !== '' &&
+    nomorAwal > 0 &&
+    nomorAkhir > nomorAwal
+  );
 
   // Check for incomplete entries (partially filled forms)
   const incompleteExpenses = expenses.filter(item => 
@@ -346,8 +364,21 @@ export default function StaffPage() {
     saveSetoranMutation.mutate(setoranData);
   };
 
-  const copyToClipboard = () => {
-    const reportText = `
+  // Fungsi gabungan: Copy ke clipboard + Auto save ke database
+  const copyAndSave = async () => {
+    // Validasi awal
+    if (!isDataComplete) {
+      toast({
+        title: "❌ Data Tidak Lengkap",
+        description: "Lengkapi nama, jam kerja, dan data meter terlebih dahulu",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // 1. Copy ke clipboard
+      let reportText = `
 Setoran Harian 📋
 ${currentDate}
 
@@ -365,25 +396,62 @@ Total Liter: ${totalLiter.toFixed(2)} L
 💰 Setoran:
 Cash: ${formatCurrency(cashSetoran)}
 QRIS: ${formatCurrency(qrisSetoran)}
-Total: ${formatCurrency(totalSetoran)}
+Total: ${formatCurrency(totalSetoran)}`;
+
+      // Tambahkan bagian pengeluaran hanya jika ada data (pu) yang digunakan
+      if (validExpenses.length > 0) {
+        reportText += `
 
 💸 Pengeluaran (PU):
 ${validExpenses.map(item => `- ${item.description}: ${formatCurrency(item.amount)}`).join('\n')}
-Total Pengeluaran: ${formatCurrency(totalExpenses)}
+Total Pengeluaran: ${formatCurrency(totalExpenses)}`;
+      }
+
+      // Tambahkan bagian pemasukan hanya jika ada data (pu) yang digunakan
+      if (validIncome.length > 0) {
+        reportText += `
 
 💵 Pemasukan (PU):
 ${validIncome.map(item => `- ${item.description}: ${formatCurrency(item.amount)}`).join('\n')}
-Total Pemasukan: ${formatCurrency(totalIncome)}
+Total Pemasukan: ${formatCurrency(totalIncome)}`;
+      }
+
+      // Total keseluruhan
+      reportText += `
 
 💼 Total Keseluruhan: ${formatCurrency(totalKeseluruhan)}
-Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)} - Pengeluaran: ${formatCurrency(totalExpenses)}
-    `.trim();
+Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)} - Pengeluaran: ${formatCurrency(totalExpenses)}`;
 
-    navigator.clipboard.writeText(reportText);
-    toast({
-      title: "Berhasil disalin!",
-      description: "Data setoran harian telah disalin ke clipboard",
-    });
+      reportText = reportText.trim();
+
+      await navigator.clipboard.writeText(reportText);
+      
+      // 2. Save ke database
+      const setoranData = {
+        employee_name: employeeName,
+        jam_masuk: jamMasuk,
+        jam_keluar: jamKeluar,
+        nomor_awal: nomorAwal,
+        nomor_akhir: nomorAkhir,
+        qris_setoran: qrisSetoran,
+        expenses: validExpenses,
+        income: validIncome
+      };
+      
+      saveSetoranMutation.mutate(setoranData);
+      
+      toast({
+        title: "✅ Berhasil!",
+        description: "Data disalin ke clipboard dan disimpan ke database",
+      });
+      
+    } catch (error) {
+      toast({
+        title: "❌ Error",
+        description: "Gagal menyalin ke clipboard",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -822,6 +890,17 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
         {/* Save and Copy Buttons */}
         <div className="space-y-3">
           <Button
+            onClick={copyAndSave}
+            className="w-full flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
+            size="lg"
+            disabled={!isDataComplete || saveSetoranMutation.isPending}
+            data-testid="button-copy-and-save"
+          >
+            <Copy className="h-5 w-5" />
+            {saveSetoranMutation.isPending ? "Memproses..." : "Copy + Simpan Data (PU)"}
+          </Button>
+          
+          <Button
             onClick={saveToDatabase}
             className="w-full flex items-center gap-2 bg-green-600 hover:bg-green-700"
             size="lg"
@@ -830,17 +909,6 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
           >
             <Save className="h-5 w-5" />
             {saveSetoranMutation.isPending ? "Menyimpan..." : "Simpan ke Database"}
-          </Button>
-          
-          <Button
-            onClick={copyToClipboard}
-            className="w-full flex items-center gap-2"
-            size="lg"
-            variant="outline"
-            data-testid="button-copy-clipboard"
-          >
-            <Copy className="h-5 w-5" />
-            Copy ke Clipboard
           </Button>
         </div>
       </div>
