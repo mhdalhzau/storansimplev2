@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Clock, Fuel, DollarSign, Plus, Minus, Copy } from "lucide-react";
+import { Plus, Minus, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -28,14 +28,14 @@ export default function StaffPage() {
   const [jamKeluar, setJamKeluar] = useState("");
   const [nomorAwal, setNomorAwal] = useState(0);
   const [nomorAkhir, setNomorAkhir] = useState(0);
-  const [cashSetoran, setCashSetoran] = useState(0);
+  const [totalSetoran, setTotalSetoran] = useState(0);
   const [qrisSetoran, setQrisSetoran] = useState(0);
   const [expenses, setExpenses] = useState<ExpenseItem[]>([]);
   const [income, setIncome] = useState<IncomeItem[]>([]);
 
   // Calculations
   const totalLiter = nomorAkhir - nomorAwal;
-  const totalSetoran = cashSetoran + qrisSetoran;
+  const cashSetoran = totalSetoran - qrisSetoran; // Cash = Total - QRIS
   const totalExpenses = expenses.reduce((sum, item) => sum + item.amount, 0);
   const totalIncome = income.reduce((sum, item) => sum + item.amount, 0);
   const totalKeseluruhan = totalSetoran + totalIncome - totalExpenses;
@@ -222,10 +222,19 @@ Setoran: ${formatCurrency(totalSetoran)} + Pemasukan: ${formatCurrency(totalInco
                 />
               </div>
             </div>
-            <div className="text-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-              <Label className="text-lg font-semibold">
-                Total Liter: {totalLiter.toFixed(2)} L
-              </Label>
+            <div>
+              <Label>Total Liter</Label>
+              <div className="relative">
+                <Input
+                  value={`${totalLiter.toFixed(2)} L`}
+                  readOnly
+                  className="bg-black text-white font-semibold cursor-default"
+                  data-testid="display-total-liter"
+                />
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2 bg-black text-white px-2 py-1 rounded text-sm font-bold">
+                  {totalLiter.toFixed(2)} L
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -236,16 +245,16 @@ Setoran: ${formatCurrency(totalSetoran)} + Pemasukan: ${formatCurrency(totalInco
             <Label className="text-lg font-semibold flex items-center gap-2 mb-4">
               💰 Setoran
             </Label>
-            <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <Label>Cash</Label>
                 <div className="flex items-center gap-2">
                   <span>Rp</span>
                   <Input
-                    type="number"
-                    value={cashSetoran || ""}
-                    onChange={(e) => setCashSetoran(Number(e.target.value) || 0)}
-                    data-testid="input-cash-setoran"
+                    value={cashSetoran || "0"}
+                    readOnly
+                    className="bg-gray-50 cursor-default"
+                    data-testid="display-cash-setoran"
                   />
                 </div>
               </div>
@@ -261,10 +270,23 @@ Setoran: ${formatCurrency(totalSetoran)} + Pemasukan: ${formatCurrency(totalInco
                   />
                 </div>
               </div>
-              <div className="text-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                <Label className="text-lg font-semibold">
-                  Total: {formatCurrency(totalSetoran)}
-                </Label>
+              <div>
+                <Label>Total</Label>
+                <div className="flex items-center gap-2">
+                  <span>Rp</span>
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      value={totalSetoran || ""}
+                      onChange={(e) => setTotalSetoran(Number(e.target.value) || 0)}
+                      className="pr-10"
+                      data-testid="input-total-setoran"
+                    />
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+                      <span className="text-white text-xs">✓</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </CardContent>
