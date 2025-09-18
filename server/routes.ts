@@ -603,12 +603,15 @@ export function registerRoutes(app: Express): Server {
       }
       
       const { hashPassword } = await import("./auth");
-      const userData = {
+      const { insertUserSchema } = await import("@shared/schema");
+      
+      // Validate the request data
+      const validatedData = insertUserSchema.parse({
         ...req.body,
         password: await hashPassword(req.body.password),
-      };
+      });
       
-      const user = await storage.createUser(userData);
+      const user = await storage.createUser(validatedData);
       res.status(201).json(user);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -622,7 +625,7 @@ export function registerRoutes(app: Express): Server {
       }
       
       const { id } = req.params;
-      const updateData = req.body;
+      const { storeIds, ...updateData } = req.body;
       
       // If password is being updated, hash it
       if (updateData.password) {
@@ -630,10 +633,22 @@ export function registerRoutes(app: Express): Server {
         updateData.password = await hashPassword(updateData.password);
       }
       
+      // Update user basic info
       const user = await storage.updateUser(id, updateData);
       if (!user) return res.status(404).json({ message: "User not found" });
       
-      res.json(user);
+      // Update store assignments if provided
+      if (storeIds && Array.isArray(storeIds)) {
+        await storage.assignUserToStores(id, storeIds);
+      }
+      
+      // Return updated user with stores
+      const updatedUser = await storage.getUser(id);
+      if (updatedUser) {
+        updatedUser.stores = await storage.getUserStores(id);
+      }
+      
+      res.json(updatedUser);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }

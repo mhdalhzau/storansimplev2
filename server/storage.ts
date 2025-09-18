@@ -3,6 +3,8 @@ import {
   type InsertUser, 
   type Store, 
   type InsertStore,
+  type UserStore,
+  type InsertUserStore,
   type Attendance,
   type InsertAttendance,
   type Sales,
@@ -36,9 +38,14 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   getAllUsers(): Promise<User[]>;
-  updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
+  updateUser(id: string, data: Partial<Omit<InsertUser, 'storeIds'>>): Promise<User | undefined>;
   deleteUser(id: string): Promise<void>;
   getUsersByStore(storeId: number): Promise<User[]>;
+  
+  // User-Store assignment methods
+  assignUserToStores(userId: string, storeIds: number[]): Promise<void>;
+  getUserStores(userId: string): Promise<Store[]>;
+  removeUserFromStores(userId: string): Promise<void>;
   
   // Store methods
   getStore(id: number): Promise<Store | undefined>;
@@ -113,6 +120,7 @@ export interface IStorage {
 export class MemStorage implements IStorage {
   private users: Map<string, User>;
   private stores: Map<number, Store>;
+  private userStores: Map<string, UserStore>;
   private attendanceRecords: Map<string, Attendance>;
   private salesRecords: Map<string, Sales>;
   private cashflowRecords: Map<string, Cashflow>;
@@ -127,6 +135,7 @@ export class MemStorage implements IStorage {
   constructor() {
     this.users = new Map();
     this.stores = new Map();
+    this.userStores = new Map();
     this.attendanceRecords = new Map();
     this.salesRecords = new Map();
     this.cashflowRecords = new Map();
@@ -194,11 +203,13 @@ export class MemStorage implements IStorage {
       password: adminPassword,
       name: "SPBU Administrator",
       role: "administrasi",
-      storeId: null,
       salary: "12000000",
       createdAt: new Date()
     };
     this.users.set(admin.id, admin);
+    
+    // Assign admin to all stores
+    await this.assignUserToStores(admin.id, [1, 2]);
   }
 
   // User methods
@@ -214,19 +225,30 @@ export class MemStorage implements IStorage {
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = randomUUID();
+    const { storeIds, ...userData } = insertUser;
     const user: User = { 
-      ...insertUser, 
+      ...userData,
       id, 
-      storeId: insertUser.storeId ?? null,
       salary: insertUser.salary ?? null,
       createdAt: new Date() 
     };
     this.users.set(id, user);
+    
+    // Assign user to stores
+    if (storeIds && storeIds.length > 0) {
+      await this.assignUserToStores(id, storeIds);
+    }
+    
     return user;
   }
 
   async getAllUsers(): Promise<User[]> {
-    return Array.from(this.users.values());
+    const users = Array.from(this.users.values());
+    // Add store information to each user
+    for (const user of users) {
+      user.stores = await this.getUserStores(user.id);
+    }
+    return users;
   }
 
   async updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined> {
@@ -248,9 +270,50 @@ export class MemStorage implements IStorage {
   }
 
   async getUsersByStore(storeId: number): Promise<User[]> {
-    return Array.from(this.users.values()).filter(
-      user => user.storeId === storeId
-    );
+    const userStoreAssignments = Array.from(this.userStores.values()).filter(us => us.storeId === storeId);
+    const users = [];
+    for (const assignment of userStoreAssignments) {
+      const user = await this.getUser(assignment.userId);
+      if (user) {
+        user.stores = await this.getUserStores(user.id);
+        users.push(user);
+      }
+    }
+    return users;
+  }
+  
+  // User-Store assignment methods
+  async assignUserToStores(userId: string, storeIds: number[]): Promise<void> {
+    // Remove existing assignments for this user
+    await this.removeUserFromStores(userId);
+    
+    // Add new assignments
+    for (const storeId of storeIds) {
+      const assignment: UserStore = {
+        id: randomUUID(),
+        userId,
+        storeId,
+        createdAt: new Date().toISOString()
+      };
+      this.userStores.set(assignment.id, assignment);
+    }
+  }
+  
+  async getUserStores(userId: string): Promise<Store[]> {
+    const userStoreAssignments = Array.from(this.userStores.values()).filter(us => us.userId === userId);
+    const stores = [];
+    for (const assignment of userStoreAssignments) {
+      const store = await this.getStore(assignment.storeId);
+      if (store) stores.push(store);
+    }
+    return stores;
+  }
+  
+  async removeUserFromStores(userId: string): Promise<void> {
+    const assignmentsToRemove = Array.from(this.userStores.values()).filter(us => us.userId === userId);
+    for (const assignment of assignmentsToRemove) {
+      this.userStores.delete(assignment.id);
+    }
   }
 
   // Store methods

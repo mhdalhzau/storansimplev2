@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -25,18 +26,29 @@ const createUserSchema = z.object({
   role: z.enum(["staff", "manager", "administrasi"], {
     errorMap: () => ({ message: "Please select a role" })
   }),
-  storeId: z.coerce.number().min(1, "Please select a store"),
+  storeIds: z.array(z.number()).min(1, "Please select at least one store"),
   salary: z.coerce.number().min(0, "Salary must be a positive number").optional(),
 });
 
 type CreateUserData = z.infer<typeof createUserSchema>;
+
+interface Store {
+  id: number;
+  name: string;
+  address?: string;
+  phone?: string;
+  manager?: string;
+  description?: string;
+  status: string;
+  createdAt: string;
+}
 
 interface User {
   id: string;
   name: string;
   email: string;
   role: string;
-  storeId: number;
+  stores?: Store[];
   salary?: number;
   createdAt: string;
 }
@@ -50,6 +62,12 @@ export default function UserManagementContent() {
   // Fetch users
   const { data: users = [], refetch } = useQuery<User[]>({
     queryKey: ["/api/users"],
+    enabled: user?.role === "manager",
+  });
+
+  // Fetch stores
+  const { data: stores = [] } = useQuery<Store[]>({
+    queryKey: ["/api/stores"],
     enabled: user?.role === "manager",
   });
 
@@ -127,7 +145,7 @@ export default function UserManagementContent() {
       email: "",
       password: "",
       role: "staff",
-      storeId: 1,
+      storeIds: [],
       salary: 0,
     },
   });
@@ -166,7 +184,7 @@ export default function UserManagementContent() {
       name: userData.name,
       email: userData.email,
       role: userData.role as any,
-      storeId: userData.storeId,
+      storeIds: userData.stores?.map(s => s.id) || [],
       salary: userData.salary || 0,
     });
   };
@@ -385,21 +403,32 @@ export default function UserManagementContent() {
 
                     <FormField
                       control={createForm.control}
-                      name="storeId"
+                      name="storeIds"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Store Assignment</FormLabel>
-                          <Select onValueChange={(value) => field.onChange(parseInt(value))} defaultValue={field.value?.toString()}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select store" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="1">Main Store</SelectItem>
-                              <SelectItem value="2">Branch Store</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <div className="space-y-2">
+                            {stores.map((store) => (
+                              <div key={store.id} className="flex items-center space-x-2">
+                                <Checkbox
+                                  data-testid={`checkbox-store-${store.id}`}
+                                  id={`store-${store.id}`}
+                                  checked={field.value?.includes(store.id) || false}
+                                  onCheckedChange={(checked) => {
+                                    const currentValues = field.value || [];
+                                    if (checked) {
+                                      field.onChange([...currentValues, store.id]);
+                                    } else {
+                                      field.onChange(currentValues.filter((id) => id !== store.id));
+                                    }
+                                  }}
+                                />
+                                <Label htmlFor={`store-${store.id}`} className="text-sm font-normal">
+                                  {store.name}
+                                </Label>
+                              </div>
+                            ))}
+                          </div>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -505,21 +534,32 @@ export default function UserManagementContent() {
 
                 <FormField
                   control={editForm.control}
-                  name="storeId"
+                  name="storeIds"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Store Assignment</FormLabel>
-                      <Select onValueChange={(value) => field.onChange(parseInt(value))} value={field.value?.toString()}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select store" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="1">Main Store</SelectItem>
-                          <SelectItem value="2">Branch Store</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <div className="space-y-2">
+                        {stores.map((store) => (
+                          <div key={store.id} className="flex items-center space-x-2">
+                            <Checkbox
+                              data-testid={`checkbox-edit-store-${store.id}`}
+                              id={`edit-store-${store.id}`}
+                              checked={field.value?.includes(store.id) || false}
+                              onCheckedChange={(checked) => {
+                                const currentValues = field.value || [];
+                                if (checked) {
+                                  field.onChange([...currentValues, store.id]);
+                                } else {
+                                  field.onChange(currentValues.filter((id) => id !== store.id));
+                                }
+                              }}
+                            />
+                            <Label htmlFor={`edit-store-${store.id}`} className="text-sm font-normal">
+                              {store.name}
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )}

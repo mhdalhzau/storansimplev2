@@ -10,8 +10,15 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
   name: text("name").notNull(),
   role: text("role").notNull(), // 'staff', 'manager', 'administrasi'
-  storeId: integer("store_id"),
   salary: decimal("salary", { precision: 12, scale: 2 }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// User-Store assignment table (many-to-many relationship)
+export const userStores = pgTable("user_stores", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  storeId: integer("store_id").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -159,6 +166,13 @@ export const piutang = pgTable("piutang", {
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   createdAt: true,
+}).extend({
+  storeIds: z.array(z.number()).min(1, "Please select at least one store"),
+});
+
+export const insertUserStoreSchema = createInsertSchema(userStores).omit({
+  id: true,
+  createdAt: true,
 });
 
 export const insertStoreSchema = createInsertSchema(stores).omit({
@@ -220,8 +234,10 @@ export const insertPiutangSchema = createInsertSchema(piutang).omit({
 });
 
 // Types
-export type User = typeof users.$inferSelect;
+export type User = typeof users.$inferSelect & { stores?: Store[] };
 export type InsertUser = z.infer<typeof insertUserSchema>;
+export type UserStore = typeof userStores.$inferSelect;
+export type InsertUserStore = z.infer<typeof insertUserStoreSchema>;
 export type Store = typeof stores.$inferSelect;
 export type InsertStore = z.infer<typeof insertStoreSchema>;
 export type Attendance = typeof attendance.$inferSelect;
