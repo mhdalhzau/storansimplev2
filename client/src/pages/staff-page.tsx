@@ -311,7 +311,7 @@ export default function StaffPage() {
     if (!employeeName.trim()) {
       toast({
         title: "❌ Data Tidak Lengkap",
-        description: "Nama karyawan harus diisi",
+        description: "Role karyawan harus dipilih",
         variant: "destructive",
       });
       return;
@@ -367,7 +367,7 @@ export default function StaffPage() {
     if (!isDataComplete) {
       toast({
         title: "❌ Data Tidak Lengkap",
-        description: "Lengkapi nama, jam kerja, dan data meter terlebih dahulu",
+        description: "Lengkapi role karyawan, jam kerja, dan data meter terlebih dahulu",
         variant: "destructive",
       });
       return;
@@ -379,7 +379,7 @@ export default function StaffPage() {
 Setoran Harian 📋
 ${currentDate}
 
-🤷‍♂️ Nama Karyawan: ${employeeName}
+🤷‍♂️ Role Karyawan: ${employeeName}
 
 🕐 Jam Kerja:
 Jam Masuk: ${jamMasuk}
@@ -464,19 +464,23 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
           </p>
         </div>
 
-        {/* Employee Name */}
+        {/* Employee Role */}
         <Card>
           <CardContent className="pt-6">
             <Label className="text-lg font-semibold flex items-center gap-2">
-              🤷‍♂️ Nama Karyawan
+              🤷‍♂️ Role Karyawan
             </Label>
-            <Input
-              placeholder="Masukkan nama karyawan"
+            <select
               value={employeeName}
               onChange={(e) => setEmployeeName(e.target.value)}
-              className="mt-2"
-              data-testid="input-employee-name"
-            />
+              className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              data-testid="select-employee-role"
+            >
+              <option value="">Pilih Role Karyawan</option>
+              <option value="karyawan">Karyawan (Staff)</option>
+              <option value="manager">Manager</option>
+              <option value="keuangan">Keuangan (Administrator)</option>
+            </select>
           </CardContent>
         </Card>
 
