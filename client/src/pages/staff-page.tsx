@@ -290,8 +290,9 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
                       return;
                     }
                     
-                    // Allow comma or dot for decimal (convert dot to comma)
-                    if ((e.key === ',' || e.key === '.') && !e.currentTarget.value.includes(',')) {
+                    // Allow comma or dot for decimal (only if no decimal separator exists yet)
+                    const currentValue = e.currentTarget.value;
+                    if ((e.key === ',' || e.key === '.') && !currentValue.includes(',') && !currentValue.includes('.')) {
                       return;
                     }
                     
@@ -344,8 +345,9 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
                       return;
                     }
                     
-                    // Allow comma or dot for decimal (convert dot to comma)
-                    if ((e.key === ',' || e.key === '.') && !e.currentTarget.value.includes(',')) {
+                    // Allow comma or dot for decimal (only if no decimal separator exists yet)
+                    const currentValue = e.currentTarget.value;
+                    if ((e.key === ',' || e.key === '.') && !currentValue.includes(',') && !currentValue.includes('.')) {
                       return;
                     }
                     
