@@ -31,11 +31,17 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  getAllUsers(): Promise<User[]>;
+  updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
+  deleteUser(id: string): Promise<void>;
+  getUsersByStore(storeId: number): Promise<User[]>;
   
   // Store methods
   getStore(id: number): Promise<Store | undefined>;
   getStores(): Promise<Store[]>;
   createStore(store: InsertStore): Promise<Store>;
+  getAllStores(): Promise<Store[]>;
+  updateStore(id: number, data: Partial<InsertStore>): Promise<Store | undefined>;
   
   // Attendance methods
   getAttendance(id: string): Promise<Attendance | undefined>;
@@ -120,12 +126,20 @@ export class MemStorage implements IStorage {
       id: 1,
       name: "Main Store",
       address: "123 Main Street",
+      phone: "021-1234567",
+      manager: "SPBU Manager",
+      description: "Main store location with full services",
+      status: "active",
       createdAt: new Date(),
     };
     const store2: Store = {
       id: 2,
       name: "Branch Store",
       address: "456 Branch Avenue",
+      phone: "021-2345678",
+      manager: null,
+      description: "Branch store location",
+      status: "active",
       createdAt: new Date(),
     };
     
@@ -142,6 +156,7 @@ export class MemStorage implements IStorage {
       name: "SPBU Manager",
       role: "manager",
       storeId: 1,
+      salary: "15000000",
       createdAt: new Date()
     };
     this.users.set(manager.id, manager);
@@ -155,6 +170,7 @@ export class MemStorage implements IStorage {
       name: "SPBU Administrator",
       role: "administrasi",
       storeId: null,
+      salary: "12000000",
       createdAt: new Date()
     };
     this.users.set(admin.id, admin);
@@ -177,10 +193,39 @@ export class MemStorage implements IStorage {
       ...insertUser, 
       id, 
       storeId: insertUser.storeId ?? null,
+      salary: insertUser.salary ?? null,
       createdAt: new Date() 
     };
     this.users.set(id, user);
     return user;
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return Array.from(this.users.values());
+  }
+
+  async updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined> {
+    const user = this.users.get(id);
+    if (user) {
+      const updated = { 
+        ...user, 
+        ...data,
+        salary: data.salary ?? user.salary
+      };
+      this.users.set(id, updated);
+      return updated;
+    }
+    return undefined;
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    this.users.delete(id);
+  }
+
+  async getUsersByStore(storeId: number): Promise<User[]> {
+    return Array.from(this.users.values()).filter(
+      user => user.storeId === storeId
+    );
   }
 
   // Store methods
@@ -196,10 +241,31 @@ export class MemStorage implements IStorage {
     const store: Store = { 
       ...insertStore, 
       address: insertStore.address ?? null,
+      phone: insertStore.phone ?? null,
+      manager: insertStore.manager ?? null,
+      description: insertStore.description ?? null,
+      status: insertStore.status ?? "active",
       createdAt: new Date() 
     };
     this.stores.set(store.id, store);
     return store;
+  }
+
+  async getAllStores(): Promise<Store[]> {
+    return Array.from(this.stores.values());
+  }
+
+  async updateStore(id: number, data: Partial<InsertStore>): Promise<Store | undefined> {
+    const store = this.stores.get(id);
+    if (store) {
+      const updated = { 
+        ...store, 
+        ...data
+      };
+      this.stores.set(id, updated);
+      return updated;
+    }
+    return undefined;
   }
 
   // Attendance methods
@@ -459,6 +525,8 @@ export class MemStorage implements IStorage {
     const newSetoran: Setoran = {
       id,
       ...setoran,
+      expensesData: setoran.expensesData ?? null,
+      incomeData: setoran.incomeData ?? null,
       createdAt,
     };
     

@@ -11,6 +11,7 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   role: text("role").notNull(), // 'staff', 'manager', 'administrasi'
   storeId: integer("store_id"),
+  salary: decimal("salary", { precision: 12, scale: 2 }),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -19,6 +20,10 @@ export const stores = pgTable("stores", {
   id: integer("id").primaryKey(),
   name: text("name").notNull(),
   address: text("address"),
+  phone: text("phone"),
+  manager: text("manager"),
+  description: text("description"),
+  status: text("status").default("active"), // 'active', 'inactive'
   createdAt: timestamp("created_at").defaultNow(),
 });
 

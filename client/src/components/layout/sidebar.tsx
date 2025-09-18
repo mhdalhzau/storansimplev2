@@ -9,6 +9,8 @@ import {
   Wallet, 
   FileText, 
   Timer, 
+  Users,
+  Store,
   LogOut 
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -66,7 +68,19 @@ const menuItems: MenuItem[] = [
     id: "overtime",
     label: "Overtime",
     icon: <Timer className="w-5 h-5" />,
-    allowedRoles: ["administrasi"],
+    allowedRoles: ["manager", "administrasi"],
+  },
+  {
+    id: "user-management",
+    label: "User Management",
+    icon: <Users className="w-5 h-5" />,
+    allowedRoles: ["manager"],
+  },
+  {
+    id: "store-management",
+    label: "Store Management",
+    icon: <Store className="w-5 h-5" />,
+    allowedRoles: ["manager"],
   },
 ];
 

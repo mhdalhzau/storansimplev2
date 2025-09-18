@@ -433,6 +433,134 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // User Management routes (Manager only)
+  app.get("/api/users", async (req, res) => {
+    try {
+      if (!req.user || req.user.role !== 'manager') {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      const users = await storage.getAllUsers();
+      res.json(users);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/users", async (req, res) => {
+    try {
+      if (!req.user || req.user.role !== 'manager') {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      const { hashPassword } = await import("./auth");
+      const userData = {
+        ...req.body,
+        password: await hashPassword(req.body.password),
+      };
+      
+      const user = await storage.createUser(userData);
+      res.status(201).json(user);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/users/:id", async (req, res) => {
+    try {
+      if (!req.user || req.user.role !== 'manager') {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      const { id } = req.params;
+      const updateData = req.body;
+      
+      // If password is being updated, hash it
+      if (updateData.password) {
+        const { hashPassword } = await import("./auth");
+        updateData.password = await hashPassword(updateData.password);
+      }
+      
+      const user = await storage.updateUser(id, updateData);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      
+      res.json(user);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/users/:id", async (req, res) => {
+    try {
+      if (!req.user || req.user.role !== 'manager') {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      const { id } = req.params;
+      await storage.deleteUser(id);
+      res.status(204).send();
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Store Management routes (Manager only)
+  app.get("/api/stores", async (req, res) => {
+    try {
+      if (!req.user || req.user.role !== 'manager') {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      const stores = await storage.getAllStores();
+      res.json(stores);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/stores", async (req, res) => {
+    try {
+      if (!req.user || req.user.role !== 'manager') {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      const store = await storage.createStore(req.body);
+      res.status(201).json(store);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/stores/:id", async (req, res) => {
+    try {
+      if (!req.user || req.user.role !== 'manager') {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      const { id } = req.params;
+      const store = await storage.updateStore(parseInt(id), req.body);
+      if (!store) return res.status(404).json({ message: "Store not found" });
+      
+      res.json(store);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/stores/:id/employees", async (req, res) => {
+    try {
+      if (!req.user || req.user.role !== 'manager') {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      const { id } = req.params;
+      const employees = await storage.getUsersByStore(parseInt(id));
+      res.json(employees);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
