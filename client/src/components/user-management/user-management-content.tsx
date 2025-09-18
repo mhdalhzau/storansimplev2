@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,7 +21,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 const createUserSchema = z.object({
   name: z.string().min(1, "Name is required"),
   email: z.string().email("Please enter a valid email"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  password: z.string().min(3, "Password must be at least 3 characters"),
   role: z.enum(["staff", "manager", "administrasi"], {
     errorMap: () => ({ message: "Please select a role" })
   }),
@@ -131,6 +131,16 @@ export default function UserManagementContent() {
       salary: 0,
     },
   });
+
+  // Watch for role and name changes to auto-set password for staff
+  const watchRole = createForm.watch("role");
+  const watchName = createForm.watch("name");
+
+  useEffect(() => {
+    if (watchRole === "staff" && watchName) {
+      createForm.setValue("password", watchName, { shouldValidate: true, shouldDirty: true });
+    }
+  }, [watchRole, watchName, createForm]);
 
   const editUserSchema = z.object({
     name: z.string().min(1, "Name is required"),
@@ -336,7 +346,14 @@ export default function UserManagementContent() {
                         <FormItem>
                           <FormLabel>Password</FormLabel>
                           <FormControl>
-                            <Input type="password" placeholder="Create password" {...field} />
+                            <Input 
+                              type="password" 
+                              placeholder={watchRole === "staff" ? "Password will be set to name" : "Create password"}
+                              readOnly={watchRole === "staff"}
+                              className={watchRole === "staff" ? "bg-gray-100 cursor-not-allowed" : ""}
+                              data-testid="input-password"
+                              {...field} 
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
