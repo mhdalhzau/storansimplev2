@@ -1,0 +1,67 @@
+Buat frontend sederhana untuk staff dengan framework modern (React / Next.js / Vue, pilih sendiri).
+Fitur:
+jangan merubah ui struktur dan fungsi di fronted untuk staff
+Login staff dengan email + password → backend JWT.
+
+Token disimpan aman (localStorage/sessionStorage).
+Tidak ada auto logout kecuali user klik logout manual.
+Halaman utama setelah login:
+
+Form Absensi:
+simpan semua field ke backend
+Notifikasi sukses/gagal setelah klik "Simpan".
+
+Multi store support: saat login, staff otomatis terikat ke store_id dari backend.
+
+Desain responsif, simple, mobile friendly.
+
+setelah itu tambah frontend untuk admin & manager menggunakan framework modern (React / Next.js / Vue, pilih sendiri).
+Fitur utama:
+
+Login & Role-based Access
+
+login menggunakan 1 page ikuti rolenya
+Login dengan email + password → backend JWT.
+Role menentukan menu (manager, administrasi, staff).
+Dashboard
+
+Ringkasan: total penjualan, absensi staff, cashflow singkat, proposal pending.
+Modul Sales
+
+Tabel laporan penjualan per store.
+Filter tanggal/store.
+Tombol "Export PDF" → GET /export/pdf.
+Tombol "Export Excel" → GET /export/excel.
+Modul Attendance
+
+Tabel absensi staff.
+Filter tanggal/store.
+Tombol "Approve Lembur" → PATCH /overtime/{id}/approve.
+Modul Cashflow
+
+Form input cashflow (kategori, tipe, nominal, keterangan).
+Tombol "Simpan" → POST /cashflow.
+Modul Payroll
+
+Hitung payroll otomatis.
+Tombol "Generate Payroll" → POST /payroll/generate.
+Tombol "Tandai Dibayar" → PATCH /payroll/{id}/pay.
+Modul Proposal
+
+Staff/Admin: form buat pengajuan → Tombol "Simpan" → POST /proposal.
+Manager: Tombol "Approve" → PATCH /proposal/{id}/approve.
+Manager: Tombol "Reject" → PATCH /proposal/{id}/reject.
+Modul Lembur
+
+Tabel lembur pending.
+Administrasi: Tombol "Approve" atau "Reject" → PATCH /overtime/{id}.
+Integrasi Google Sheets
+
+Tombol "Sync ke Google Sheets" → POST /store/{id}/sync.
+Tampilkan status sync.
+Setup struktur template Google Sheets sesuai dengan data yang ada download to excel
+UI & UX
+
+Sidebar menu sesuai role.
+Semua form punya tombol "Simpan" yang mengarah ke endpoint backend.
+Notifikasi toast sukses/gagal setelah klik tombol.
