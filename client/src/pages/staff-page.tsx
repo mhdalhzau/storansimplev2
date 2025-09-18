@@ -279,33 +279,6 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
                       }
                     }
                   }}
-                  onKeyDown={(e) => {
-                    // Allow control keys (copy, paste, select all, etc.)
-                    if (e.ctrlKey || e.metaKey) {
-                      return;
-                    }
-                    
-                    // Allow navigation and editing keys
-                    if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'Tab', 'Enter', 'Escape'].includes(e.key)) {
-                      return;
-                    }
-                    
-                    // Allow numbers
-                    if (/^[0-9]$/.test(e.key)) {
-                      return;
-                    }
-                    
-                    // Allow decimal separator (comma or dot) if not already present
-                    const currentValue = e.currentTarget.value;
-                    if (e.key === ',' || e.key === '.') {
-                      if (!currentValue.includes(',') && !currentValue.includes('.')) {
-                        return; // Allow first decimal separator
-                      }
-                    }
-                    
-                    // Block all other keys
-                    e.preventDefault();
-                  }}
                   data-testid="input-nomor-awal"
                 />
               </div>
@@ -340,33 +313,6 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
                         setNomorAkhir(numValue);
                       }
                     }
-                  }}
-                  onKeyDown={(e) => {
-                    // Allow control keys (copy, paste, select all, etc.)
-                    if (e.ctrlKey || e.metaKey) {
-                      return;
-                    }
-                    
-                    // Allow navigation and editing keys
-                    if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'Tab', 'Enter', 'Escape'].includes(e.key)) {
-                      return;
-                    }
-                    
-                    // Allow numbers
-                    if (/^[0-9]$/.test(e.key)) {
-                      return;
-                    }
-                    
-                    // Allow decimal separator (comma or dot) if not already present
-                    const currentValue = e.currentTarget.value;
-                    if (e.key === ',' || e.key === '.') {
-                      if (!currentValue.includes(',') && !currentValue.includes('.')) {
-                        return; // Allow first decimal separator
-                      }
-                    }
-                    
-                    // Block all other keys
-                    e.preventDefault();
                   }}
                   data-testid="input-nomor-akhir"
                 />
