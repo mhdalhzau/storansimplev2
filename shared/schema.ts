@@ -102,6 +102,26 @@ export const overtime = pgTable("overtime", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Setoran table
+export const setoran = pgTable("setoran", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeName: text("employee_name").notNull(),
+  jamMasuk: text("jam_masuk").notNull(),
+  jamKeluar: text("jam_keluar").notNull(),
+  nomorAwal: decimal("nomor_awal", { precision: 10, scale: 3 }).notNull(),
+  nomorAkhir: decimal("nomor_akhir", { precision: 10, scale: 3 }).notNull(),
+  totalLiter: decimal("total_liter", { precision: 10, scale: 3 }).notNull(),
+  totalSetoran: decimal("total_setoran", { precision: 12, scale: 2 }).notNull(),
+  qrisSetoran: decimal("qris_setoran", { precision: 12, scale: 2 }).notNull(),
+  cashSetoran: decimal("cash_setoran", { precision: 12, scale: 2 }).notNull(),
+  expensesData: text("expenses_data"), // JSON string
+  totalExpenses: decimal("total_expenses", { precision: 12, scale: 2 }).notNull(),
+  incomeData: text("income_data"), // JSON string  
+  totalIncome: decimal("total_income", { precision: 12, scale: 2 }).notNull(),
+  totalKeseluruhan: decimal("total_keseluruhan", { precision: 12, scale: 2 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -151,6 +171,11 @@ export const insertOvertimeSchema = createInsertSchema(overtime).omit({
   approvedAt: true,
 });
 
+export const insertSetoranSchema = createInsertSchema(setoran).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -168,3 +193,5 @@ export type Proposal = typeof proposals.$inferSelect;
 export type InsertProposal = z.infer<typeof insertProposalSchema>;
 export type Overtime = typeof overtime.$inferSelect;
 export type InsertOvertime = z.infer<typeof insertOvertimeSchema>;
+export type Setoran = typeof setoran.$inferSelect;
+export type InsertSetoran = z.infer<typeof insertSetoranSchema>;

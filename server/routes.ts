@@ -6,7 +6,8 @@ import {
   insertAttendanceSchema,
   insertCashflowSchema,
   insertProposalSchema,
-  insertOvertimeSchema
+  insertOvertimeSchema,
+  insertSetoranSchema
 } from "@shared/schema";
 
 export function registerRoutes(app: Express): Server {
@@ -344,6 +345,70 @@ export function registerRoutes(app: Express): Server {
         syncedAt: new Date().toISOString(),
         recordsCount: 150
       });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Setoran routes
+  app.post("/api/setoran", async (req, res) => {
+    try {
+      // Calculate all values
+      const {
+        employee_name,
+        jam_masuk,
+        jam_keluar,
+        nomor_awal,
+        nomor_akhir,
+        qris_setoran,
+        expenses,
+        income
+      } = req.body;
+
+      // Calculate liter
+      const total_liter = Math.max(0, nomor_akhir - nomor_awal);
+      
+      // Calculate setoran (1 liter = Rp 11.500)
+      const total_setoran = total_liter * 11500;
+      const cash_setoran = Math.max(0, total_setoran - qris_setoran);
+      
+      // Calculate expenses and income
+      const total_expenses = expenses?.reduce((sum: number, item: any) => 
+        sum + (Number(item.amount) || 0), 0) || 0;
+      const total_income = income?.reduce((sum: number, item: any) => 
+        sum + (Number(item.amount) || 0), 0) || 0;
+      
+      // Total keseluruhan = Cash + Pemasukan - Pengeluaran
+      const total_keseluruhan = cash_setoran + total_income - total_expenses;
+      
+      const data = insertSetoranSchema.parse({
+        employeeName: employee_name,
+        jamMasuk: jam_masuk,
+        jamKeluar: jam_keluar,
+        nomorAwal: nomor_awal.toString(),
+        nomorAkhir: nomor_akhir.toString(),
+        totalLiter: total_liter.toString(),
+        totalSetoran: total_setoran.toString(),
+        qrisSetoran: qris_setoran.toString(),
+        cashSetoran: cash_setoran.toString(),
+        expensesData: JSON.stringify(expenses || []),
+        totalExpenses: total_expenses.toString(),
+        incomeData: JSON.stringify(income || []),
+        totalIncome: total_income.toString(),
+        totalKeseluruhan: total_keseluruhan.toString(),
+      });
+      
+      const setoran = await storage.createSetoran(data);
+      res.status(201).json(setoran);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/setoran", async (req, res) => {
+    try {
+      const setoranData = await storage.getAllSetoran();
+      res.json(setoranData);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }

@@ -14,7 +14,9 @@ import {
   type Proposal,
   type InsertProposal,
   type Overtime,
-  type InsertOvertime
+  type InsertOvertime,
+  type Setoran,
+  type InsertSetoran
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import session from "express-session";
@@ -73,6 +75,11 @@ export interface IStorage {
   createOvertime(overtime: InsertOvertime): Promise<Overtime>;
   updateOvertimeStatus(id: string, status: string, approvedBy: string): Promise<Overtime | undefined>;
   
+  // Setoran methods
+  getSetoran(id: string): Promise<Setoran | undefined>;
+  getAllSetoran(): Promise<Setoran[]>;
+  createSetoran(setoran: InsertSetoran): Promise<Setoran>;
+  
   sessionStore: SessionStore;
 }
 
@@ -85,6 +92,7 @@ export class MemStorage implements IStorage {
   private payrollRecords: Map<string, Payroll>;
   private proposalRecords: Map<string, Proposal>;
   private overtimeRecords: Map<string, Overtime>;
+  private setoranRecords: Map<string, Setoran>;
   public sessionStore: SessionStore;
 
   constructor() {
@@ -96,6 +104,7 @@ export class MemStorage implements IStorage {
     this.payrollRecords = new Map();
     this.proposalRecords = new Map();
     this.overtimeRecords = new Map();
+    this.setoranRecords = new Map();
     
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000,
@@ -430,6 +439,31 @@ export class MemStorage implements IStorage {
       return updated;
     }
     return undefined;
+  }
+
+  // Setoran methods
+  async getSetoran(id: string): Promise<Setoran | undefined> {
+    return this.setoranRecords.get(id);
+  }
+
+  async getAllSetoran(): Promise<Setoran[]> {
+    return Array.from(this.setoranRecords.values()).sort((a, b) => 
+      new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime()
+    );
+  }
+
+  async createSetoran(setoran: InsertSetoran): Promise<Setoran> {
+    const id = randomUUID();
+    const createdAt = new Date();
+    
+    const newSetoran: Setoran = {
+      id,
+      ...setoran,
+      createdAt,
+    };
+    
+    this.setoranRecords.set(id, newSetoran);
+    return newSetoran;
   }
 }
 
