@@ -1062,7 +1062,7 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
             {submitDataMutation.isPending ? "Memproses..." : "Copy + Simpan Data (PU)"}
           </Button>
           
-          {!isValidated && selectedStaffId && (
+          {!isValidated && selectedStaffName && (
             <p className="text-sm text-red-600 text-center">
               ⚠️ Validasi password diperlukan sebelum mengirim data
             </p>
