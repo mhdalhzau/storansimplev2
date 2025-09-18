@@ -48,6 +48,7 @@ export const attendance = pgTable("attendance", {
   breakDuration: integer("break_duration").default(0), // in minutes
   overtime: decimal("overtime", { precision: 4, scale: 2 }).default("0"), // in hours (kept for compatibility)
   notes: text("notes"),
+  attendanceStatus: text("attendance_status").default("hadir"), // 'hadir', 'cuti', 'alpha'
   status: text("status").default("pending"), // 'pending', 'approved', 'rejected'
   createdAt: timestamp("created_at").defaultNow(),
 });

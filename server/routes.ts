@@ -1263,6 +1263,201 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Staff Attendance Management routes
+  app.get("/api/employees", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+      
+      // Get accessible store IDs for the user
+      const accessibleStoreIds = await getAccessibleStoreIds(req.user);
+      if (accessibleStoreIds.length === 0) {
+        return res.json([]);
+      }
+      
+      // Get all employees from accessible stores
+      let employees: any[] = [];
+      for (const storeId of accessibleStoreIds) {
+        const storeEmployees = await storage.getUsersByStore(storeId);
+        employees.push(...storeEmployees.filter((u: any) => u.role === 'staff'));
+      }
+      
+      // Remove duplicates and add store info
+      const uniqueEmployees = employees.filter((emp, index, self) => 
+        index === self.findIndex((e) => e.id === emp.id)
+      );
+      
+      // Add store names to each employee
+      const employeesWithStores = await Promise.all(
+        uniqueEmployees.map(async (emp) => {
+          const empStores = await storage.getUserStores(emp.id);
+          const storeNames = empStores.map(store => store.name).join(', ');
+          return { ...emp, storeNames };
+        })
+      );
+      
+      res.json(employeesWithStores);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Get monthly attendance for employee
+  app.get("/api/employees/:employeeId/attendance/:year/:month", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+      
+      const { employeeId, year, month } = req.params;
+      
+      // Verify access to employee
+      const employee = await storage.getUser(employeeId);
+      if (!employee) {
+        return res.status(404).json({ message: "Employee not found" });
+      }
+      
+      // For non-admins, verify shared store access
+      if (req.user.role !== 'administrasi') {
+        const employeeStores = await storage.getUserStores(employee.id);
+        const currentUserStores = await storage.getUserStores(req.user.id);
+        
+        const hasSharedStore = employeeStores.some(es => 
+          currentUserStores.some(cs => cs.id === es.id)
+        );
+        
+        if (!hasSharedStore) {
+          return res.status(403).json({ message: "Access denied to this employee's data" });
+        }
+      }
+      
+      // Get attendance records for the month
+      const startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
+      const endDate = new Date(parseInt(year), parseInt(month), 0);
+      
+      const attendanceRecords = await storage.getAttendanceByUserAndDateRange(
+        employeeId, 
+        startDate.toISOString(), 
+        endDate.toISOString()
+      );
+      
+      // Generate full month data
+      const daysInMonth = endDate.getDate();
+      const monthlyData = [];
+      
+      for (let day = 1; day <= daysInMonth; day++) {
+        const currentDate = new Date(parseInt(year), parseInt(month) - 1, day);
+        const dateStr = currentDate.toISOString().split('T')[0];
+        const dayName = currentDate.toLocaleDateString('id-ID', { weekday: 'long' });
+        
+        // Find existing attendance record for this date
+        const existingRecord = attendanceRecords.find((record: any) => {
+          const recordDate = new Date(record.date).toISOString().split('T')[0];
+          return recordDate === dateStr;
+        });
+        
+        monthlyData.push({
+          date: dateStr,
+          day: dayName,
+          ...existingRecord,
+          // If no record exists, set defaults
+          checkIn: existingRecord?.checkIn || '',
+          checkOut: existingRecord?.checkOut || '',
+          shift: existingRecord?.shift || '',
+          latenessMinutes: existingRecord?.latenessMinutes || 0,
+          overtimeMinutes: existingRecord?.overtimeMinutes || 0,
+          attendanceStatus: existingRecord?.attendanceStatus || 'hadir',
+          notes: existingRecord?.notes || ''
+        });
+      }
+      
+      res.json({
+        employee: {
+          id: employee.id,
+          name: employee.name,
+          stores: await storage.getUserStores(employee.id)
+        },
+        attendanceData: monthlyData
+      });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Bulk update monthly attendance
+  app.put("/api/employees/:employeeId/attendance/:year/:month", async (req, res) => {
+    try {
+      if (!req.user || !['manager', 'administrasi'].includes(req.user.role)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      const { employeeId, year, month } = req.params;
+      const { attendanceData } = req.body;
+      
+      // Verify access to employee
+      const employee = await storage.getUser(employeeId);
+      if (!employee) {
+        return res.status(404).json({ message: "Employee not found" });
+      }
+      
+      // For non-admins, verify shared store access
+      if (req.user.role !== 'administrasi') {
+        const employeeStores = await storage.getUserStores(employee.id);
+        const currentUserStores = await storage.getUserStores(req.user.id);
+        
+        const hasSharedStore = employeeStores.some(es => 
+          currentUserStores.some(cs => cs.id === es.id)
+        );
+        
+        if (!hasSharedStore) {
+          return res.status(403).json({ message: "Access denied to update this employee's data" });
+        }
+      }
+      
+      // Get employee's first store for new records
+      const employeeStores = await storage.getUserStores(employee.id);
+      const primaryStoreId = employeeStores[0]?.id;
+      
+      if (!primaryStoreId) {
+        return res.status(400).json({ message: "Employee is not assigned to any store" });
+      }
+      
+      // Update each day's attendance
+      const results = [];
+      for (const dayData of attendanceData) {
+        if (dayData.id) {
+          // Update existing record
+          const updated = await storage.updateAttendance(dayData.id, {
+            checkIn: dayData.checkIn || null,
+            checkOut: dayData.checkOut || null,
+            shift: dayData.shift || null,
+            latenessMinutes: dayData.latenessMinutes || 0,
+            overtimeMinutes: dayData.overtimeMinutes || 0,
+            attendanceStatus: dayData.attendanceStatus || 'hadir',
+            notes: dayData.notes || null
+          });
+          results.push(updated);
+        } else if (dayData.checkIn || dayData.checkOut || dayData.notes) {
+          // Create new record only if there's meaningful data
+          const created = await storage.createAttendance({
+            userId: employeeId,
+            storeId: primaryStoreId,
+            date: new Date(dayData.date),
+            checkIn: dayData.checkIn || null,
+            checkOut: dayData.checkOut || null,
+            shift: dayData.shift || null,
+            latenessMinutes: dayData.latenessMinutes || 0,
+            overtimeMinutes: dayData.overtimeMinutes || 0,
+            attendanceStatus: dayData.attendanceStatus || 'hadir',
+            notes: dayData.notes || null
+          });
+          results.push(created);
+        }
+      }
+      
+      res.json({ success: true, updated: results.length });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

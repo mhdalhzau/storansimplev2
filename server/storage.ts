@@ -400,6 +400,21 @@ export class MemStorage implements IStorage {
     );
   }
 
+  async getAttendanceByUserAndDateRange(userId: string, startDate: string, endDate: string): Promise<Attendance[]> {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    return Array.from(this.attendanceRecords.values()).filter(
+      (record) => {
+        if (record.userId !== userId) return false;
+        if (!record.date) return false;
+        
+        const recordDate = new Date(record.date);
+        return recordDate >= start && recordDate <= end;
+      }
+    );
+  }
+
   async createAttendance(insertAttendance: InsertAttendance): Promise<Attendance> {
     const id = randomUUID();
     const record: Attendance = { 
@@ -414,6 +429,7 @@ export class MemStorage implements IStorage {
       breakDuration: insertAttendance.breakDuration ?? 0,
       overtime: insertAttendance.overtime ?? "0",
       notes: insertAttendance.notes ?? null,
+      attendanceStatus: insertAttendance.attendanceStatus ?? "hadir",
       status: "pending",
       createdAt: new Date() 
     };
