@@ -122,8 +122,13 @@ export default function StaffPage() {
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0,
-      maximumFractionDigits: 0
+      maximumFractionDigits: 0,
+      currencyDisplay: 'symbol'
     }).format(amount);
+  };
+
+  const formatNumber = (amount: number) => {
+    return new Intl.NumberFormat('id-ID').format(amount);
   };
 
   const copyToClipboard = () => {
@@ -201,7 +206,7 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
             <Label className="text-lg font-semibold flex items-center gap-2 mb-4">
               🕐 Jam Kerja
             </Label>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label>Jam Masuk</Label>
                 <Input
@@ -230,38 +235,87 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
             <Label className="text-lg font-semibold flex items-center gap-2 mb-4">
               ⛽ Data Meter
             </Label>
-            <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <Label>Nomor Awal</Label>
                 <Input
-                  type="number"
-                  value={nomorAwal || ""}
-                  onChange={(e) => setNomorAwal(Number(e.target.value) || 0)}
+                  type="text"
+                  inputMode="decimal"
+                  value={nomorAwal === 0 ? "" : nomorAwal.toString().replace('.', ',')}
+                  onChange={(e) => {
+                    let value = e.target.value;
+                    // Replace . with , untuk format Indonesia
+                    value = value.replace(/\./g, ',');
+                    // Only allow numbers and one comma
+                    value = value.replace(/[^0-9,]/g, '');
+                    // Only allow one comma
+                    const commaCount = (value.match(/,/g) || []).length;
+                    if (commaCount > 1) {
+                      value = value.replace(/,([^,]*)$/, (match, p1) => ',' + p1.replace(/,/g, ''));
+                    }
+                    
+                    if (value === '' || value === ',') {
+                      setNomorAwal(0);
+                    } else {
+                      // Convert Indonesian format to JavaScript decimal
+                      const numValue = parseFloat(value.replace(',', '.'));
+                      if (!isNaN(numValue)) {
+                        setNomorAwal(Math.max(0, numValue));
+                      }
+                    }
+                  }}
+                  onKeyPress={(e) => {
+                    if (!/[0-9.,]/.test(e.key) && e.key !== 'Backspace' && e.key !== 'Delete' && e.key !== 'Enter' && e.key !== 'Tab') {
+                      e.preventDefault();
+                    }
+                  }}
                   data-testid="input-nomor-awal"
                 />
               </div>
               <div>
                 <Label>Nomor Akhir</Label>
                 <Input
-                  type="number"
-                  value={nomorAkhir || ""}
-                  onChange={(e) => setNomorAkhir(Number(e.target.value) || 0)}
+                  type="text"
+                  inputMode="decimal"
+                  value={nomorAkhir === 0 ? "" : nomorAkhir.toString().replace('.', ',')}
+                  onChange={(e) => {
+                    let value = e.target.value;
+                    // Replace . with , untuk format Indonesia
+                    value = value.replace(/\./g, ',');
+                    // Only allow numbers and one comma
+                    value = value.replace(/[^0-9,]/g, '');
+                    // Only allow one comma
+                    const commaCount = (value.match(/,/g) || []).length;
+                    if (commaCount > 1) {
+                      value = value.replace(/,([^,]*)$/, (match, p1) => ',' + p1.replace(/,/g, ''));
+                    }
+                    
+                    if (value === '' || value === ',') {
+                      setNomorAkhir(0);
+                    } else {
+                      // Convert Indonesian format to JavaScript decimal
+                      const numValue = parseFloat(value.replace(',', '.'));
+                      if (!isNaN(numValue)) {
+                        setNomorAkhir(Math.max(0, numValue));
+                      }
+                    }
+                  }}
+                  onKeyPress={(e) => {
+                    if (!/[0-9.,]/.test(e.key) && e.key !== 'Backspace' && e.key !== 'Delete' && e.key !== 'Enter' && e.key !== 'Tab') {
+                      e.preventDefault();
+                    }
+                  }}
                   data-testid="input-nomor-akhir"
                 />
               </div>
-            </div>
-            <div>
-              <Label>Total Liter</Label>
-              <div className="relative">
+              <div>
+                <Label>Total Liter</Label>
                 <Input
                   value={`${totalLiter.toFixed(2)} L`}
                   readOnly
                   className="bg-black text-white font-semibold cursor-default"
                   data-testid="display-total-liter"
                 />
-                <div className="absolute right-3 top-1/2 transform -translate-y-1/2 bg-black text-white px-2 py-1 rounded text-sm font-bold">
-                  {totalLiter.toFixed(2)} L
-                </div>
               </div>
             </div>
           </CardContent>
@@ -273,13 +327,13 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
             <Label className="text-lg font-semibold flex items-center gap-2 mb-4">
               💰 Setoran
             </Label>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <Label>Cash</Label>
                 <div className="flex items-center gap-2">
                   <span>Rp</span>
                   <Input
-                    value={formatCurrency(cashSetoran).replace('Rp', '').trim()}
+                    value={formatNumber(cashSetoran)}
                     readOnly
                     className="bg-gray-50 cursor-default"
                     data-testid="display-cash-setoran"
@@ -305,7 +359,7 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
                   <span>Rp</span>
                   <div className="relative">
                     <Input
-                      value={formatCurrency(totalSetoran).replace('Rp', '').trim()}
+                      value={formatNumber(totalSetoran)}
                       readOnly
                       className="pr-10 bg-green-50 cursor-default"
                       data-testid="display-total-setoran"
