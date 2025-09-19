@@ -71,31 +71,103 @@ export default function AttendanceDetailPage() {
   const [attendanceData, setAttendanceData] = useState<AttendanceRecord[]>([]);
   const [hasChanges, setHasChanges] = useState(false);
 
-  // Fetch monthly attendance data
-  const { data: monthlyData, isLoading, refetch } = useQuery<MonthlyAttendanceData>({
-    queryKey: [`/api/employees/${employeeId}/attendance/${year}/${month}`],
+  // Fetch employee data
+  const { data: employees } = useQuery<EmployeeData[]>({
+    queryKey: ["/api/users"],
+  });
+
+  // Fetch attendance data for user
+  const { data: attendanceRecords, isLoading, refetch } = useQuery<any[]>({
+    queryKey: ["/api/attendance/user", employeeId],
     enabled: !!employeeId
   });
 
-  // Update local state when data loads
+  // Get current employee data
+  const currentEmployee = employees?.find(emp => emp.id === employeeId);
+
+  // Update local state when data loads and generate calendar
   useEffect(() => {
-    if (monthlyData?.attendanceData) {
-      setAttendanceData(monthlyData.attendanceData);
+    if (attendanceRecords && currentEmployee) {
+      // Generate calendar for the month
+      const daysInMonth = new Date(year, month, 0).getDate();
+      const monthlyData: AttendanceRecord[] = [];
+      
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateString = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+        const dayName = new Date(year, month - 1, day).toLocaleDateString('id-ID', { weekday: 'long' });
+        
+        // Find existing attendance for this date
+        const existingRecord = attendanceRecords.find(record => {
+          const recordDate = new Date(record.date).toISOString().split('T')[0];
+          return recordDate === dateString;
+        });
+        
+        const record: AttendanceRecord = {
+          id: existingRecord?.id,
+          date: dateString,
+          day: dayName,
+          checkIn: existingRecord?.checkIn || '--:--',
+          checkOut: existingRecord?.checkOut || '--:--',
+          shift: existingRecord?.shift || 'pagi',
+          latenessMinutes: existingRecord?.latenessMinutes || 0,
+          overtimeMinutes: existingRecord?.overtimeMinutes || 0,
+          attendanceStatus: existingRecord?.attendanceStatus || 'hadir',
+          notes: existingRecord?.notes || ''
+        };
+        
+        monthlyData.push(record);
+      }
+      
+      setAttendanceData(monthlyData);
       setHasChanges(false);
     }
-  }, [monthlyData]);
+  }, [attendanceRecords, currentEmployee, year, month]);
 
   // Save changes mutation
   const saveMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest('PUT', `/api/employees/${employeeId}/attendance/${year}/${month}`, { attendanceData });
+      // Save only records that have actual check-in/out times
+      const recordsToSave = attendanceData.filter(record => 
+        record.checkIn !== '--:--' || record.checkOut !== '--:--'
+      );
+      
+      const promises = recordsToSave.map(async (record) => {
+        if (record.id) {
+          // Update existing record
+          return apiRequest('PUT', `/api/attendance/${record.id}`, {
+            checkIn: record.checkIn !== '--:--' ? record.checkIn : null,
+            checkOut: record.checkOut !== '--:--' ? record.checkOut : null,
+            shift: record.shift,
+            latenessMinutes: record.latenessMinutes,
+            overtimeMinutes: record.overtimeMinutes,
+            attendanceStatus: record.attendanceStatus,
+            notes: record.notes
+          });
+        } else if (record.checkIn !== '--:--' || record.checkOut !== '--:--') {
+          // Create new record only if there's actual time data
+          return apiRequest('POST', '/api/attendance', {
+            userId: employeeId,
+            storeId: currentEmployee?.stores?.[0]?.id || 1,
+            date: record.date,
+            checkIn: record.checkIn !== '--:--' ? record.checkIn : null,
+            checkOut: record.checkOut !== '--:--' ? record.checkOut : null,
+            shift: record.shift,
+            latenessMinutes: record.latenessMinutes,
+            overtimeMinutes: record.overtimeMinutes,
+            attendanceStatus: record.attendanceStatus,
+            notes: record.notes
+          });
+        }
+      });
+      
+      await Promise.all(promises);
     },
     onSuccess: () => {
       toast({ title: "Berhasil", description: "Data absensi berhasil disimpan" });
       setHasChanges(false);
       // Invalidate and refetch the data
       queryClient.invalidateQueries({
-        queryKey: [`/api/employees/${employeeId}/attendance/${year}/${month}`]
+        queryKey: ["/api/attendance/user", employeeId]
       });
       refetch();
     },
@@ -208,7 +280,7 @@ export default function AttendanceDetailPage() {
 
   // Export to CSV
   const exportToCSV = () => {
-    if (!monthlyData?.employee || !attendanceData.length) return;
+    if (!currentEmployee || !attendanceData.length) return;
     
     const headers = ['Tanggal', 'Hari', 'Jam Masuk', 'Jam Keluar', 'Shift', 'Status', 'Terlambat (menit)', 'Lembur (menit)', 'Catatan'];
     const csvContent = [
@@ -229,7 +301,7 @@ export default function AttendanceDetailPage() {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `absensi_${monthlyData.employee.name}_${year}_${month.toString().padStart(2, '0')}.csv`;
+    link.download = `absensi_${currentEmployee.name}_${year}_${month.toString().padStart(2, '0')}.csv`;
     link.click();
   };
 
@@ -255,7 +327,7 @@ export default function AttendanceDetailPage() {
     );
   }
 
-  if (!monthlyData) {
+  if (!currentEmployee) {
     return (
       <div className="container mx-auto py-8">
         <Card>
@@ -291,10 +363,10 @@ export default function AttendanceDetailPage() {
           </Link>
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100" data-testid="text-employee-name">
-              {monthlyData.employee.name}
+              {currentEmployee?.name}
             </h1>
             <p className="text-gray-600 dark:text-gray-400" data-testid="text-store-info">
-              {monthlyData.employee.stores.map(s => s.name).join(', ')}
+              {currentEmployee?.stores?.map((s: any) => s.name).join(', ')}
             </p>
           </div>
         </div>
@@ -502,7 +574,8 @@ export default function AttendanceDetailPage() {
                 <Button 
                   variant="outline" 
                   onClick={() => {
-                    setAttendanceData(monthlyData.attendanceData);
+                    // Reset to original data by refetching
+                    refetch();
                     setHasChanges(false);
                   }}
                   data-testid="button-discard-changes"
