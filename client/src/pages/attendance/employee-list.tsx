@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CalendarIcon, UserIcon, Building2Icon, ArrowLeftIcon } from "lucide-react";
+import { CalendarIcon, UserIcon, Building2Icon } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
 interface Employee {
@@ -40,12 +40,6 @@ export default function EmployeeListPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-4">
-          <Link href="/" data-testid="button-back-home">
-            <Button variant="outline" size="sm">
-              <ArrowLeftIcon className="h-4 w-4 mr-2" />
-              Kembali ke Dashboard
-            </Button>
-          </Link>
           <div>
             <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
               Manajemen Absensi Karyawan
