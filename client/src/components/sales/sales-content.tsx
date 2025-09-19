@@ -111,8 +111,42 @@ function SalesDetailModal({ record }: { record: Sales }) {
         </DialogHeader>
         
         <div className="space-y-6">
+          {/* Tabel Setoran */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <CreditCard className="h-5 w-5 text-green-600" />
+                Setoran
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Cash</TableHead>
+                    <TableHead>QRIS</TableHead>
+                    <TableHead>Total</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow>
+                    <TableCell className="font-semibold text-orange-600">
+                      {formatRupiah(record.totalCash || 0)}
+                    </TableCell>
+                    <TableCell className="font-semibold text-blue-600">
+                      {formatRupiah(record.totalQris || 0)}
+                    </TableCell>
+                    <TableCell className="font-semibold text-green-700">
+                      {formatRupiah((parseFloat(record.totalCash || "0") + parseFloat(record.totalQris || "0")))}
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
           {/* Shift Info */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-3 md:grid-cols-3 gap-4">
             <div className="bg-blue-50 p-3 rounded-lg">
               <div className="flex items-center gap-2 text-blue-700 mb-1">
                 <Clock className="h-4 w-4" />
@@ -138,15 +172,6 @@ function SalesDetailModal({ record }: { record: Sales }) {
               </div>
               <p className="text-lg font-semibold">
                 {record.checkOut || "—"}
-              </p>
-            </div>
-            <div className="bg-purple-50 p-3 rounded-lg">
-              <div className="flex items-center gap-2 text-purple-700 mb-1">
-                <TrendingUp className="h-4 w-4" />
-                <span className="font-medium">Total Transaksi</span>
-              </div>
-              <p className="text-lg font-semibold">
-                {record.transactions}
               </p>
             </div>
           </div>
@@ -185,39 +210,6 @@ function SalesDetailModal({ record }: { record: Sales }) {
             </CardContent>
           </Card>
 
-          {/* Tabel Setoran */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <CreditCard className="h-5 w-5 text-green-600" />
-                Setoran
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Cash</TableHead>
-                    <TableHead>QRIS</TableHead>
-                    <TableHead>Total</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow>
-                    <TableCell className="font-semibold text-orange-600">
-                      {formatRupiah(record.totalCash || 0)}
-                    </TableCell>
-                    <TableCell className="font-semibold text-blue-600">
-                      {formatRupiah(record.totalQris || 0)}
-                    </TableCell>
-                    <TableCell className="font-semibold text-green-700">
-                      {formatRupiah((parseFloat(record.totalCash || "0") + parseFloat(record.totalQris || "0")))}
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
 
           {/* Tabel PU (Pemasukan/Pengeluaran) */}
           <Card>
@@ -454,8 +446,42 @@ function StaffSalesContent({ record, onDelete, canDelete, isDeleting }: {
         </div>
       )}
 
+      {/* Tabel Setoran */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <CreditCard className="h-5 w-5 text-green-600" />
+            Setoran
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Cash</TableHead>
+                <TableHead>QRIS</TableHead>
+                <TableHead>Total</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow>
+                <TableCell className="font-semibold text-orange-600">
+                  {formatRupiah(record.totalCash || 0)}
+                </TableCell>
+                <TableCell className="font-semibold text-blue-600">
+                  {formatRupiah(record.totalQris || 0)}
+                </TableCell>
+                <TableCell className="font-semibold text-green-700">
+                  {formatRupiah((parseFloat(record.totalCash || "0") + parseFloat(record.totalQris || "0")))}
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
       {/* Shift Info */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-3 md:grid-cols-3 gap-4">
         <div className="bg-blue-50 p-3 rounded-lg">
           <div className="flex items-center gap-2 text-blue-700 mb-1">
             <Clock className="h-4 w-4" />
@@ -481,15 +507,6 @@ function StaffSalesContent({ record, onDelete, canDelete, isDeleting }: {
           </div>
           <p className="text-lg font-semibold">
             {record.checkOut || "—"}
-          </p>
-        </div>
-        <div className="bg-purple-50 p-3 rounded-lg">
-          <div className="flex items-center gap-2 text-purple-700 mb-1">
-            <TrendingUp className="h-4 w-4" />
-            <span className="font-medium">Total Transaksi</span>
-          </div>
-          <p className="text-lg font-semibold">
-            {record.transactions}
           </p>
         </div>
       </div>
@@ -521,40 +538,6 @@ function StaffSalesContent({ record, onDelete, canDelete, isDeleting }: {
                 </TableCell>
                 <TableCell className="font-semibold text-blue-600">
                   {record.totalLiters || "0"} L
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      {/* Tabel Setoran */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <CreditCard className="h-5 w-5 text-green-600" />
-            Setoran
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Cash</TableHead>
-                <TableHead>QRIS</TableHead>
-                <TableHead>Total</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow>
-                <TableCell className="font-semibold text-orange-600">
-                  {formatRupiah(record.totalCash || 0)}
-                </TableCell>
-                <TableCell className="font-semibold text-blue-600">
-                  {formatRupiah(record.totalQris || 0)}
-                </TableCell>
-                <TableCell className="font-semibold text-green-700">
-                  {formatRupiah((parseFloat(record.totalCash || "0") + parseFloat(record.totalQris || "0")))}
                 </TableCell>
               </TableRow>
             </TableBody>
