@@ -498,7 +498,6 @@ Total: Hadir ${hadir}, Cuti ${cuti}, Alpha ${alpha}`;
                           <SelectValue placeholder="--" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">--</SelectItem>
                           <SelectItem value="hadir">Hadir</SelectItem>
                           <SelectItem value="cuti">Cuti</SelectItem>
                           <SelectItem value="alpha">Alpha</SelectItem>
