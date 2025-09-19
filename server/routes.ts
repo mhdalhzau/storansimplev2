@@ -419,25 +419,45 @@ export function registerRoutes(app: Express): Server {
 
         importResults.totalProcessed = setoranData.length;
 
+        // Fetch existing sales records once for duplicate checking
+        const existingSales = await storage.getSalesByStore(targetStoreId);
+        const existingSubmissionIds = new Set(existingSales.map(s => s.submissionDate).filter(Boolean));
+
         // Process each setoran record and convert to sales
         for (let i = 0; i < setoranData.length; i++) {
           const setoran = setoranData[i];
           
           try {
-            // Validate required fields
-            if (!setoran.employee_name || !setoran.total_keseluruhan || !setoran.created_at) {
+            // Validate required fields - need either employee ID or name, and total amount
+            const hasEmployee = setoran.employee_id || setoran.employee_name;
+            const hasTotal = setoran.total_keseluruhan || setoran.total_setoran;
+            
+            if (!hasEmployee || !hasTotal) {
               importResults.skipped++;
               importResults.details.push({
                 index: i,
                 employeeName: setoran.employee_name || 'Unknown',
                 status: 'skipped',
-                reason: 'Missing required fields (employee_name, total_keseluruhan, or created_at)'
+                reason: 'Missing required fields (employee_id/employee_name or total_keseluruhan/total_setoran)'
               });
               continue;
             }
 
             // Calculate sales metrics from setoran data
-            const salesData = convertSetoranToSales(setoran, targetStoreId);
+            const salesData = await convertSetoranToSales(setoran, targetStoreId);
+            
+            // Check for existing record to prevent duplicates
+            const submissionId = salesData.submissionDate;
+            if (existingSubmissionIds.has(submissionId)) {
+              importResults.skipped++;
+              importResults.details.push({
+                index: i,
+                employeeName: setoran.employee_name,
+                status: 'skipped',
+                reason: 'Duplicate record - already imported for this employee/date/store combination'
+              });
+              continue;
+            }
             
             // Validate the converted data
             const validatedSalesData = insertSalesSchema.parse(salesData);
@@ -515,7 +535,19 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Helper function to convert setoran data to sales format
-  function convertSetoranToSales(setoran: any, storeId: number): any {
+  async function convertSetoranToSales(setoran: any, storeId: number): Promise<any> {
+    // Helper to safely convert to decimal string or undefined
+    function toDecimalString(value: any): string | undefined {
+      if (value === null || value === undefined || value === '') return undefined;
+      const num = parseFloat(value);
+      return isNaN(num) ? undefined : num.toString();
+    }
+
+    // Helper to safely get string value or undefined
+    function toStringOrUndefined(value: any): string | undefined {
+      return (value && value !== '') ? value : undefined;
+    }
+
     // Parse expenses and income from JSON strings if needed
     let expenses = [];
     let income = [];
@@ -542,16 +574,52 @@ export function registerRoutes(app: Express): Server {
       income = [];
     }
 
-    // Calculate sales metrics
-    const totalSales = parseFloat(setoran.total_keseluruhan || setoran.total_setoran || '0');
-    
-    // Count transactions - assume 1 main fuel transaction + number of income items
-    const fuelTransactionCount = setoran.total_liter && setoran.total_liter > 0 ? 1 : 0;
-    const incomeTransactionCount = income.length || 0;
-    const transactions = fuelTransactionCount + incomeTransactionCount;
-    
-    // Calculate average ticket
-    const averageTicket = transactions > 0 ? totalSales / transactions : 0;
+    // Helper function to determine shift from check-in time
+    function determineShift(jamMasuk: string): string {
+      if (!jamMasuk) return '';
+      
+      // Parse time (expect format like "06:00" or "06:00:00")
+      const timeParts = jamMasuk.split(':');
+      if (timeParts.length < 2) return '';
+      
+      const hour = parseInt(timeParts[0], 10);
+      
+      if (hour >= 6 && hour < 14) {
+        return 'pagi'; // Morning shift: 6:00-14:00
+      } else if (hour >= 14 && hour < 22) {
+        return 'siang'; // Day shift: 14:00-22:00  
+      } else {
+        return 'malam'; // Night shift: 22:00-06:00
+      }
+    }
+
+    // Resolve employee ID - try to find existing user by employee ID or name
+    let resolvedUserId = undefined;
+    if (setoran.employee_id) {
+      try {
+        const user = await storage.getUser(setoran.employee_id);
+        if (user) {
+          resolvedUserId = user.id;
+        }
+      } catch (e) {
+        console.warn('Failed to resolve employee by ID:', setoran.employee_id);
+      }
+    }
+
+    // If no user found by ID, try to find by name
+    if (!resolvedUserId && setoran.employee_name) {
+      try {
+        const allUsers = await storage.getAllUsers();
+        const userByName = allUsers.find(user => 
+          user.name.toLowerCase() === setoran.employee_name.toLowerCase()
+        );
+        if (userByName) {
+          resolvedUserId = userByName.id;
+        }
+      } catch (e) {
+        console.warn('Failed to resolve employee by name:', setoran.employee_name);
+      }
+    }
 
     // Convert date
     let salesDate;
@@ -561,13 +629,76 @@ export function registerRoutes(app: Express): Server {
       salesDate = new Date(); // fallback to current date
     }
 
-    return {
+    // Calculate sales metrics
+    const totalSales = parseFloat(setoran.total_keseluruhan || setoran.total_setoran || '0');
+    
+    // Count transactions - assume 1 main fuel transaction + number of income items  
+    const fuelTransactionCount = setoran.total_liter && parseFloat(setoran.total_liter) > 0 ? 1 : 0;
+    const incomeTransactionCount = income.length || 0;
+    const transactions = fuelTransactionCount + incomeTransactionCount;
+    
+    // Calculate average ticket
+    const averageTicket = transactions > 0 ? totalSales / transactions : 0;
+
+    // Build complete sales record with all fields from setoran
+    const salesData: any = {
       storeId: storeId,
       date: salesDate,
       totalSales: totalSales.toString(),
       transactions: transactions,
-      averageTicket: averageTicket.toString()
+      averageTicket: averageTicket.toString(),
     };
+
+    // Only add userId if resolved
+    if (resolvedUserId) {
+      salesData.userId = resolvedUserId;
+    }
+
+    // Payment breakdown
+    const qrisAmount = toDecimalString(setoran.qris_setoran);
+    if (qrisAmount) salesData.totalQris = qrisAmount;
+    
+    const cashAmount = toDecimalString(setoran.cash_setoran);
+    if (cashAmount) salesData.totalCash = cashAmount;
+
+    // Meter readings  
+    const meterStart = toDecimalString(setoran.nomor_awal);
+    if (meterStart) salesData.meterStart = meterStart;
+    
+    const meterEnd = toDecimalString(setoran.nomor_akhir);
+    if (meterEnd) salesData.meterEnd = meterEnd;
+    
+    const totalLiters = toDecimalString(setoran.total_liter);
+    if (totalLiters) salesData.totalLiters = totalLiters;
+
+    // Income/Expenses
+    const incomeAmount = toDecimalString(setoran.total_income);
+    if (incomeAmount) salesData.totalIncome = incomeAmount;
+    
+    const expenseAmount = toDecimalString(setoran.total_expenses);
+    if (expenseAmount) salesData.totalExpenses = expenseAmount;
+
+    // JSON details - only if data exists
+    const incomeDetails = setoran.income_data || (income.length > 0 ? JSON.stringify(income) : undefined);
+    if (incomeDetails) salesData.incomeDetails = incomeDetails;
+    
+    const expenseDetails = setoran.expenses_data || (expenses.length > 0 ? JSON.stringify(expenses) : undefined);
+    if (expenseDetails) salesData.expenseDetails = expenseDetails;
+
+    // Shift information
+    const shift = determineShift(setoran.jam_masuk || '');
+    if (shift) salesData.shift = shift;
+    
+    const checkIn = toStringOrUndefined(setoran.jam_masuk);
+    if (checkIn) salesData.checkIn = checkIn;
+    
+    const checkOut = toStringOrUndefined(setoran.jam_keluar);
+    if (checkOut) salesData.checkOut = checkOut;
+
+    // Submission tracking - use employee name and date for uniqueness
+    salesData.submissionDate = `${salesDate.toISOString().split('T')[0]}-${setoran.employee_id || setoran.employee_name || 'unknown'}-${storeId}`;
+
+    return salesData;
   }
 
   app.get("/api/export/pdf", async (req, res) => {
