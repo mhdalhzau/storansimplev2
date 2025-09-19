@@ -1227,7 +1227,7 @@ export function registerRoutes(app: Express): Server {
         }
       }
       
-      // 2. Create sales record for all setoran submissions
+      // 2. Create sales record for all setoran submissions using proper conversion
       {
         try {
           let salesStoreId = await getUserFirstStoreId(req.user);
@@ -1237,14 +1237,31 @@ export function registerRoutes(app: Express): Server {
             salesStoreId = 1; // Default store
           }
           
-          const salesData = insertSalesSchema.parse({
-            storeId: salesStoreId,
-            totalSales: total_setoran.toString(),
-            transactions: Math.round(total_liter),
-            averageTicket: total_liter > 0 ? (total_setoran / total_liter).toString() : "0"
-          });
+          // Create setoran object that matches convertSetoranToSales expected format
+          const setoranForConversion = {
+            employee_id: employeeId,
+            employee_name: employee_name,
+            jam_masuk: jam_masuk,
+            jam_keluar: jam_keluar,
+            nomor_awal: nomor_awal,
+            nomor_akhir: nomor_akhir,
+            total_liter: total_liter,
+            total_setoran: total_setoran,
+            qris_setoran: qris_setoran,
+            cash_setoran: cash_setoran,
+            total_expenses: total_expenses,
+            total_income: total_income,
+            total_keseluruhan: total_keseluruhan,
+            expenses_data: JSON.stringify(expenses || []),
+            income_data: JSON.stringify(income || []),
+            created_at: new Date().toISOString()
+          };
           
-          const sales = await storage.createSales(salesData);
+          // Use the proper conversion function to map all setoran data to sales
+          const salesData = await convertSetoranToSales(setoranForConversion, salesStoreId);
+          const validatedSalesData = insertSalesSchema.parse(salesData);
+          
+          const sales = await storage.createSales(validatedSalesData);
           results.sales = sales;
         } catch (salesError) {
           console.warn('Failed to create sales record:', salesError);
