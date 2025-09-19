@@ -600,6 +600,30 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  app.delete("/api/sales/:id", async (req, res) => {
+    try {
+      if (!req.user || !['manager', 'administrasi'].includes(req.user.role)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      // Get the sales record first to check store access
+      const existingSales = await storage.getSales(req.params.id);
+      if (!existingSales) return res.status(404).json({ message: "Sales record not found" });
+      
+      // Check store authorization for non-admins
+      if (req.user.role !== 'administrasi') {
+        if (!(await hasStoreAccess(req.user, existingSales.storeId))) {
+          return res.status(403).json({ message: "Cannot delete sales records from stores you don't have access to" });
+        }
+      }
+      
+      await storage.deleteSales(req.params.id);
+      res.status(204).send();
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
   // Cashflow routes
   app.post("/api/cashflow", async (req, res) => {
     try {
