@@ -969,7 +969,38 @@ export function registerRoutes(app: Express): Server {
         password: await hashPassword(req.body.password),
       });
       
-      const user = await storage.createUser(validatedData);
+      // Auto-assign new users to stores based on creator's access
+      let storeIds: number[] = validatedData.storeIds || [];
+      
+      if (storeIds.length === 0) {
+        const userRole = req.user.role as string;
+        if (userRole === 'administrasi') {
+          // Admins can assign to any store, default to first store
+          const allStores = await storage.getStores();
+          if (allStores.length > 0) {
+            storeIds = [allStores[0].id];
+          }
+        } else if (userRole === 'manager') {
+          // Managers assign to their stores
+          const managerStores = await storage.getUserStores(req.user.id);
+          if (managerStores.length > 0) {
+            storeIds = managerStores.map(s => s.id);
+          } else {
+            // If manager has no stores, assign to default store
+            storeIds = [1];
+          }
+        } else {
+          // Staff and others get assigned to default store
+          storeIds = [1];
+        }
+      }
+      
+      const userDataWithStores = {
+        ...validatedData,
+        storeIds: storeIds
+      };
+      
+      const user = await storage.createUser(userDataWithStores);
       res.status(201).json(user);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
