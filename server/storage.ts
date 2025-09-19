@@ -527,8 +527,22 @@ export class MemStorage implements IStorage {
     const record: Sales = { 
       ...insertSales, 
       id,
-      date: insertSales.date ?? null,
+      userId: insertSales.userId ?? null,
+      date: insertSales.date ?? new Date(),
       averageTicket: insertSales.averageTicket ?? null,
+      totalQris: insertSales.totalQris ?? "0",
+      totalCash: insertSales.totalCash ?? "0",
+      meterStart: insertSales.meterStart ?? null,
+      meterEnd: insertSales.meterEnd ?? null,
+      totalLiters: insertSales.totalLiters ?? null,
+      totalIncome: insertSales.totalIncome ?? "0",
+      totalExpenses: insertSales.totalExpenses ?? "0",
+      incomeDetails: insertSales.incomeDetails ?? null,
+      expenseDetails: insertSales.expenseDetails ?? null,
+      shift: insertSales.shift ?? null,
+      checkIn: insertSales.checkIn ?? null,
+      checkOut: insertSales.checkOut ?? null,
+      submissionDate: insertSales.submissionDate ?? null,
       createdAt: new Date() 
     };
     this.salesRecords.set(id, record);
