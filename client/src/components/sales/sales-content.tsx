@@ -7,8 +7,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { FileDown, FileSpreadsheet, TrendingUp, Upload, Loader2, Eye, Clock, Gauge, CreditCard, Calculator } from "lucide-react";
+import { FileDown, FileSpreadsheet, TrendingUp, Upload, Loader2, Eye, Clock, Gauge, CreditCard, Calculator, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
 import { formatRupiah } from "@/lib/utils";
 import { type Sales } from "@shared/schema";
@@ -16,6 +17,37 @@ import { type Sales } from "@shared/schema";
 // Sales Detail Modal Component
 function SalesDetailModal({ record }: { record: Sales }) {
   const [isOpen, setIsOpen] = useState(false);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  
+  // Delete mutation for sales record
+  const deleteSalesMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest('DELETE', `/api/sales/${id}`);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: "Sales record deleted successfully",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/sales'] });
+      setIsOpen(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete sales record",
+        variant: "destructive",
+      });
+    },
+  });
+  
+  const handleDeleteSales = (id: string) => {
+    if (confirm("Are you sure you want to delete this sales record? This action cannot be undone.")) {
+      deleteSalesMutation.mutate(id);
+    }
+  };
   
   // Parse JSON data if available
   const parseJsonData = (jsonString: string | null) => {
@@ -45,9 +77,28 @@ function SalesDetailModal({ record }: { record: Sales }) {
       </DialogTrigger>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5" />
-            Detail Penjualan Per Shift
+          <DialogTitle className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5" />
+              Detail Penjualan Per Shift
+            </div>
+            {user && ['manager', 'administrasi'].includes(user.role) && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => handleDeleteSales(record.id)}
+                disabled={deleteSalesMutation.isPending}
+                className="text-red-600 border-red-200 hover:bg-red-50"
+                data-testid={`button-delete-${record.id}`}
+              >
+                {deleteSalesMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4 mr-1" />
+                )}
+                {deleteSalesMutation.isPending ? "Menghapus..." : "Hapus"}
+              </Button>
+            )}
           </DialogTitle>
         </DialogHeader>
         
