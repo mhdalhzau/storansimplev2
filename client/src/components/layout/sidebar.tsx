@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 import { 
   Building, 
   BarChart3, 
-  Clock, 
   TrendingUp, 
   DollarSign, 
   Wallet, 
@@ -33,12 +32,6 @@ const menuItems: MenuItem[] = [
     id: "dashboard",
     label: "Dashboard",
     icon: <BarChart3 className="w-5 h-5" />,
-    allowedRoles: ["staff", "manager", "administrasi"],
-  },
-  {
-    id: "attendance",
-    label: "Attendance",
-    icon: <Clock className="w-5 h-5" />,
     allowedRoles: ["staff", "manager", "administrasi"],
   },
   {
