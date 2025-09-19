@@ -13,6 +13,249 @@ import { apiRequest } from "@/lib/queryClient";
 import { formatRupiah } from "@/lib/utils";
 import { type Sales } from "@shared/schema";
 
+// Sales Detail Modal Component
+function SalesDetailModal({ record }: { record: Sales }) {
+  const [isOpen, setIsOpen] = useState(false);
+  
+  // Parse JSON data if available
+  const parseJsonData = (jsonString: string | null) => {
+    if (!jsonString) return [];
+    try {
+      return JSON.parse(jsonString);
+    } catch {
+      return [];
+    }
+  };
+
+  const incomeData = parseJsonData(record.incomeDetails || null);
+  const expenseData = parseJsonData(record.expenseDetails || null);
+
+  return (
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <DialogTrigger asChild>
+        <Button 
+          variant="outline" 
+          size="sm"
+          className="text-blue-600 border-blue-200 hover:bg-blue-50"
+          data-testid={`button-detail-${record.id}`}
+        >
+          <Eye className="h-4 w-4 mr-1" />
+          Detail
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5" />
+            Detail Penjualan Per Shift
+          </DialogTitle>
+        </DialogHeader>
+        
+        <div className="space-y-6">
+          {/* Shift Info */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-blue-50 p-3 rounded-lg">
+              <div className="flex items-center gap-2 text-blue-700 mb-1">
+                <Clock className="h-4 w-4" />
+                <span className="font-medium">Shift</span>
+              </div>
+              <p className="text-lg font-semibold capitalize">
+                {record.shift || "—"}
+              </p>
+            </div>
+            <div className="bg-green-50 p-3 rounded-lg">
+              <div className="flex items-center gap-2 text-green-700 mb-1">
+                <Clock className="h-4 w-4" />
+                <span className="font-medium">Jam Masuk</span>
+              </div>
+              <p className="text-lg font-semibold">
+                {record.checkIn || "—"}
+              </p>
+            </div>
+            <div className="bg-orange-50 p-3 rounded-lg">
+              <div className="flex items-center gap-2 text-orange-700 mb-1">
+                <Clock className="h-4 w-4" />
+                <span className="font-medium">Jam Keluar</span>
+              </div>
+              <p className="text-lg font-semibold">
+                {record.checkOut || "—"}
+              </p>
+            </div>
+            <div className="bg-purple-50 p-3 rounded-lg">
+              <div className="flex items-center gap-2 text-purple-700 mb-1">
+                <TrendingUp className="h-4 w-4" />
+                <span className="font-medium">Total Transaksi</span>
+              </div>
+              <p className="text-lg font-semibold">
+                {record.transactions}
+              </p>
+            </div>
+          </div>
+
+          {/* Data Meter Table */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Gauge className="h-5 w-5 text-blue-600" />
+                Data Meter
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nomor Awal</TableHead>
+                    <TableHead>Nomor Akhir</TableHead>
+                    <TableHead>Total Liter</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow>
+                    <TableCell className="font-medium">
+                      {record.meterStart || "0"}
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {record.meterEnd || "0"}
+                    </TableCell>
+                    <TableCell className="font-semibold text-blue-600">
+                      {record.totalLiters || "0"} L
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          {/* Tabel Setoran */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <CreditCard className="h-5 w-5 text-green-600" />
+                Setoran
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Cash</TableHead>
+                    <TableHead>QRIS</TableHead>
+                    <TableHead>Total</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow>
+                    <TableCell className="font-semibold text-orange-600">
+                      {formatRupiah(record.totalCash || 0)}
+                    </TableCell>
+                    <TableCell className="font-semibold text-blue-600">
+                      {formatRupiah(record.totalQris || 0)}
+                    </TableCell>
+                    <TableCell className="font-semibold text-green-700">
+                      {formatRupiah((parseFloat(record.totalCash || "0") + parseFloat(record.totalQris || "0")))}
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          {/* Tabel PU (Pemasukan/Pengeluaran) */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Calculator className="h-5 w-5 text-purple-600" />
+                PU (Pemasukan & Pengeluaran)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid md:grid-cols-2 gap-6">
+                {/* Pemasukan */}
+                <div>
+                  <h4 className="font-semibold text-green-700 mb-3 flex items-center gap-2">
+                    <span className="w-3 h-3 bg-green-500 rounded-full"></span>
+                    Pemasukan
+                  </h4>
+                  {incomeData.length > 0 ? (
+                    <div className="space-y-2">
+                      {incomeData.map((item: any, index: number) => (
+                        <div key={index} className="flex justify-between items-center p-2 bg-green-50 rounded">
+                          <span className="text-sm">{item.description || item.name || `Item ${index + 1}`}</span>
+                          <span className="font-medium text-green-700">{formatRupiah(item.amount || 0)}</span>
+                        </div>
+                      ))}
+                      <div className="border-t pt-2 mt-3">
+                        <div className="flex justify-between items-center font-semibold">
+                          <span>Total Pemasukan:</span>
+                          <span className="text-green-700">{formatRupiah(record.totalIncome || 0)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center text-muted-foreground py-4">
+                      <p className="text-sm">Tidak ada data pemasukan</p>
+                      <p className="font-medium mt-1">{formatRupiah(record.totalIncome || 0)}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Pengeluaran */}
+                <div>
+                  <h4 className="font-semibold text-red-700 mb-3 flex items-center gap-2">
+                    <span className="w-3 h-3 bg-red-500 rounded-full"></span>
+                    Pengeluaran
+                  </h4>
+                  {expenseData.length > 0 ? (
+                    <div className="space-y-2">
+                      {expenseData.map((item: any, index: number) => (
+                        <div key={index} className="flex justify-between items-center p-2 bg-red-50 rounded">
+                          <span className="text-sm">{item.description || item.name || `Item ${index + 1}`}</span>
+                          <span className="font-medium text-red-700">{formatRupiah(item.amount || 0)}</span>
+                        </div>
+                      ))}
+                      <div className="border-t pt-2 mt-3">
+                        <div className="flex justify-between items-center font-semibold">
+                          <span>Total Pengeluaran:</span>
+                          <span className="text-red-700">{formatRupiah(record.totalExpenses || 0)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center text-muted-foreground py-4">
+                      <p className="text-sm">Tidak ada data pengeluaran</p>
+                      <p className="font-medium mt-1">{formatRupiah(record.totalExpenses || 0)}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Total Keseluruhan */}
+          <Card className="bg-gradient-to-r from-blue-50 to-green-50 border-2 border-blue-200">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <TrendingUp className="h-6 w-6 text-blue-600" />
+                Total Keseluruhan
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-center">
+                <p className="text-3xl font-bold text-green-700 mb-2">
+                  {formatRupiah(record.totalSales)}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Total penjualan pada shift ini
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function SalesContent() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
