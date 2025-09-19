@@ -5,9 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileDown, FileSpreadsheet, TrendingUp, Upload, Loader2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { FileDown, FileSpreadsheet, TrendingUp, Upload, Loader2, Eye, Clock, Gauge, CreditCard, Calculator } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { formatRupiah } from "@/lib/utils";
 import { type Sales } from "@shared/schema";
 
 export default function SalesContent() {
@@ -202,31 +205,61 @@ export default function SalesContent() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Date</TableHead>
+                  <TableHead>Tanggal</TableHead>
+                  <TableHead>Hari Ini</TableHead>
                   <TableHead>Store</TableHead>
-                  <TableHead>Total Sales</TableHead>
-                  <TableHead>Transactions</TableHead>
-                  <TableHead>Avg. Ticket</TableHead>
+                  <TableHead>Total Transaksi</TableHead>
+                  <TableHead>Total Penjualan</TableHead>
+                  <TableHead>Total QRIS</TableHead>
+                  <TableHead>Total Cash</TableHead>
+                  <TableHead>Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {salesRecords.map((record) => (
-                  <TableRow key={record.id}>
-                    <TableCell>
-                      {record.date ? new Date(record.date).toLocaleDateString() : "—"}
-                    </TableCell>
-                    <TableCell>
-                      {record.storeId === 1 ? "Main Store" : "Branch Store"}
-                    </TableCell>
-                    <TableCell className="font-semibold">
-                      ${parseFloat(record.totalSales).toFixed(2)}
-                    </TableCell>
-                    <TableCell>{record.transactions}</TableCell>
-                    <TableCell>
-                      ${record.averageTicket ? parseFloat(record.averageTicket).toFixed(2) : "0.00"}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {salesRecords.map((record) => {
+                  const recordDate = record.date ? new Date(record.date) : new Date();
+                  const today = new Date();
+                  const isToday = recordDate.toDateString() === today.toDateString();
+                  
+                  return (
+                    <TableRow key={record.id}>
+                      <TableCell>
+                        {recordDate.toLocaleDateString('id-ID', { 
+                          year: 'numeric', 
+                          month: 'short', 
+                          day: 'numeric' 
+                        })}
+                      </TableCell>
+                      <TableCell>
+                        {isToday ? (
+                          <Badge variant="default" className="bg-green-100 text-green-800">
+                            Hari Ini
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {record.storeId === 1 ? "Main Store" : "Branch Store"}
+                      </TableCell>
+                      <TableCell className="text-center font-medium">
+                        {record.transactions}
+                      </TableCell>
+                      <TableCell className="font-semibold text-green-700">
+                        {formatRupiah(record.totalSales)}
+                      </TableCell>
+                      <TableCell className="text-blue-600">
+                        {formatRupiah(record.totalQris || 0)}
+                      </TableCell>
+                      <TableCell className="text-orange-600">
+                        {formatRupiah(record.totalCash || 0)}
+                      </TableCell>
+                      <TableCell>
+                        <SalesDetailModal record={record} />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
