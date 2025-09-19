@@ -68,6 +68,7 @@ export interface IStorage {
   getSales(id: string): Promise<Sales | undefined>;
   getSalesByStore(storeId: number, startDate?: string, endDate?: string): Promise<Sales[]>;
   createSales(sales: InsertSales): Promise<Sales>;
+  checkDailySubmission(userId: string, storeId: number, date: string): Promise<boolean>;
   
   // Cashflow methods
   getCashflow(id: string): Promise<Cashflow | undefined>;
@@ -547,6 +548,19 @@ export class MemStorage implements IStorage {
     };
     this.salesRecords.set(id, record);
     return record;
+  }
+
+  async checkDailySubmission(userId: string, storeId: number, date: string): Promise<boolean> {
+    // Check if user has already submitted sales data for this date and store
+    const existingSubmission = Array.from(this.salesRecords.values()).find(record => {
+      if (record.userId !== userId || record.storeId !== storeId) return false;
+      
+      // Compare dates (YYYY-MM-DD format)
+      const recordDate = record.date?.toISOString().split('T')[0];
+      return recordDate === date;
+    });
+    
+    return !!existingSubmission;
   }
 
   // Cashflow methods
