@@ -213,6 +213,49 @@ export class MemStorage implements IStorage {
     
     // Assign admin to all stores
     await this.assignUserToStores(admin.id, [1, 2]);
+
+    // Create 3 default staff members
+    // Putri
+    const putriPassword = await hashPassword("putri123");
+    const putri: User = {
+      id: randomUUID(),
+      email: "putri@spbu.com",
+      password: putriPassword,
+      name: "Putri",
+      role: "staff",
+      salary: "8000000",
+      createdAt: new Date()
+    };
+    this.users.set(putri.id, putri);
+    await this.assignUserToStores(putri.id, [1]);
+
+    // Hafiz
+    const hafizPassword = await hashPassword("hafiz123");
+    const hafiz: User = {
+      id: randomUUID(),
+      email: "hafiz@spbu.com",
+      password: hafizPassword,
+      name: "Hafiz",
+      role: "staff",
+      salary: "8000000",
+      createdAt: new Date()
+    };
+    this.users.set(hafiz.id, hafiz);
+    await this.assignUserToStores(hafiz.id, [1]);
+
+    // Endang
+    const endangPassword = await hashPassword("endang123");
+    const endang: User = {
+      id: randomUUID(),
+      email: "endang@spbu.com",
+      password: endangPassword,
+      name: "Endang",
+      role: "staff",
+      salary: "8000000",
+      createdAt: new Date()
+    };
+    this.users.set(endang.id, endang);
+    await this.assignUserToStores(endang.id, [2]);
   }
 
   // User methods
