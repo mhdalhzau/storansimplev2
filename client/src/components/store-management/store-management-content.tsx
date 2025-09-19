@@ -8,13 +8,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Store, Building, Users, MapPin, Edit, Trash2, Plus } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Store, Building, Users, MapPin, Edit, Trash2, Plus, Phone } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 
 const storeSchema = z.object({
@@ -51,17 +53,20 @@ interface StoreEmployee {
 export default function StoreManagementContent() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("list");
   const [selectedStore, setSelectedStore] = useState<StoreInfo | null>(null);
+  const [editingStore, setEditingStore] = useState<StoreInfo | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   // Fetch stores
-  const { data: stores = [], refetch: refetchStores } = useQuery<StoreInfo[]>({
+  const { data: stores = [], refetch: refetchStores, isLoading: storesLoading, error: storesError } = useQuery<StoreInfo[]>({
     queryKey: ["/api/stores"],
     enabled: user?.role === "manager",
   });
 
   // Fetch employees for selected store
-  const { data: storeEmployees = [] } = useQuery<StoreEmployee[]>({
+  const { data: storeEmployees = [], isLoading: employeesLoading, error: employeesError } = useQuery<StoreEmployee[]>({
     queryKey: ["/api/stores", selectedStore?.id, "employees"],
     enabled: user?.role === "manager" && !!selectedStore,
   });
@@ -100,12 +105,14 @@ export default function StoreManagementContent() {
         title: "✅ Success",
         description: "Store updated successfully",
       });
-      refetchStores();
+      queryClient.invalidateQueries({ queryKey: ["/api/stores"] });
+      setEditDialogOpen(false);
+      setEditingStore(null);
     },
     onError: (error: any) => {
       toast({
         title: "❌ Error",
-        description: error.message,
+        description: error.message || "Failed to update store",
         variant: "destructive",
       });
     },
@@ -122,8 +129,43 @@ export default function StoreManagementContent() {
     },
   });
 
+  const editForm = useForm<StoreData>({
+    resolver: zodResolver(storeSchema),
+    defaultValues: {
+      name: "",
+      address: "",
+      phone: "",
+      manager: "",
+      description: "",
+    },
+  });
+
   const onCreateStore = (data: StoreData) => {
     createStoreMutation.mutate(data);
+  };
+
+  const onEditStore = (data: StoreData) => {
+    if (editingStore) {
+      updateStoreMutation.mutate({ id: editingStore.id, data });
+    }
+  };
+
+  const openEditDialog = (store: StoreInfo) => {
+    setEditingStore(store);
+    editForm.reset({
+      name: store.name,
+      address: store.address,
+      phone: store.phone,
+      manager: store.manager || "",
+      description: store.description || "",
+    });
+    setEditDialogOpen(true);
+  };
+
+  const closeEditDialog = () => {
+    setEditDialogOpen(false);
+    setEditingStore(null);
+    editForm.reset();
   };
 
   const getStatusBadgeColor = (status: string) => {
@@ -178,6 +220,23 @@ export default function StoreManagementContent() {
               </CardTitle>
             </CardHeader>
             <CardContent>
+              {storesError && (
+                <div className="p-4 mb-4 bg-red-50 border border-red-200 rounded-md">
+                  <p className="text-red-700 text-sm">Error loading stores: {(storesError as any)?.message}</p>
+                </div>
+              )}
+              {storesLoading && (
+                <div className="flex items-center justify-center p-8">
+                  <p className="text-gray-500">Loading stores...</p>
+                </div>
+              )}
+              {!storesLoading && stores.length === 0 && !storesError && (
+                <div className="text-center p-8">
+                  <Building className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                  <p className="text-gray-500">No stores found</p>
+                  <p className="text-sm text-gray-400 mt-1">Create your first store to get started</p>
+                </div>
+              )}
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -215,12 +274,17 @@ export default function StoreManagementContent() {
                               setSelectedStore(store);
                               setActiveTab("employees");
                             }}
+                            data-testid={`button-view-employees-${store.id}`}
+                            title="View Employees"
                           >
                             <Users className="h-4 w-4" />
                           </Button>
                           <Button
                             size="sm"
                             variant="outline"
+                            onClick={() => openEditDialog(store)}
+                            data-testid={`button-edit-store-${store.id}`}
+                            title="Edit Store"
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
@@ -253,7 +317,11 @@ export default function StoreManagementContent() {
                         <FormItem>
                           <FormLabel>Store Name</FormLabel>
                           <FormControl>
-                            <Input placeholder="Enter store name" {...field} />
+                            <Input 
+                              placeholder="Enter store name" 
+                              data-testid="input-store-name"
+                              {...field} 
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -267,7 +335,11 @@ export default function StoreManagementContent() {
                         <FormItem>
                           <FormLabel>Phone Number</FormLabel>
                           <FormControl>
-                            <Input placeholder="Enter phone number" {...field} />
+                            <Input 
+                              placeholder="Enter phone number" 
+                              data-testid="input-store-phone"
+                              {...field} 
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -281,7 +353,11 @@ export default function StoreManagementContent() {
                         <FormItem>
                           <FormLabel>Manager Name</FormLabel>
                           <FormControl>
-                            <Input placeholder="Enter manager name" {...field} />
+                            <Input 
+                              placeholder="Enter manager name" 
+                              data-testid="input-store-manager"
+                              {...field} 
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -296,7 +372,11 @@ export default function StoreManagementContent() {
                       <FormItem>
                         <FormLabel>Address</FormLabel>
                         <FormControl>
-                          <Textarea placeholder="Enter store address" {...field} />
+                          <Textarea 
+                            placeholder="Enter store address" 
+                            data-testid="input-store-address"
+                            {...field} 
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -321,6 +401,7 @@ export default function StoreManagementContent() {
                     type="submit" 
                     className="w-full" 
                     disabled={createStoreMutation.isPending}
+                    data-testid="button-create-store"
                   >
                     {createStoreMutation.isPending ? "Creating..." : "Create Store"}
                   </Button>
@@ -341,11 +422,24 @@ export default function StoreManagementContent() {
               </CardHeader>
               <CardContent>
                 <div className="mb-4 p-4 bg-gray-50 rounded-lg">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
-                      <Label className="text-sm font-medium">Store Info</Label>
-                      <p className="text-sm text-gray-600">{selectedStore.name}</p>
-                      <p className="text-xs text-gray-500">{selectedStore.address}</p>
+                      <Label className="text-sm font-medium flex items-center gap-1">
+                        <Building className="h-4 w-4" />
+                        Store Info
+                      </Label>
+                      <p className="text-sm text-gray-600 font-medium" data-testid={`text-store-name-${selectedStore.id}`}>{selectedStore.name}</p>
+                      <p className="text-xs text-gray-500 flex items-start gap-1 mt-1">
+                        <MapPin className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                        {selectedStore.address}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium">Contact</Label>
+                      <p className="text-sm text-gray-600 flex items-center gap-1">
+                        <Phone className="h-3 w-3" />
+                        {selectedStore.phone || "No phone"}
+                      </p>
                     </div>
                     <div>
                       <Label className="text-sm font-medium">Manager</Label>
@@ -353,43 +447,198 @@ export default function StoreManagementContent() {
                     </div>
                     <div>
                       <Label className="text-sm font-medium">Total Employees</Label>
-                      <p className="text-sm text-gray-600">{selectedStore.employeeCount} employees</p>
+                      <p className="text-sm text-gray-600 flex items-center gap-1">
+                        <Users className="h-3 w-3" />
+                        {selectedStore.employeeCount} employees
+                      </p>
                     </div>
                   </div>
                 </div>
 
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Role</TableHead>
-                      <TableHead>Salary</TableHead>
-                      <TableHead>Join Date</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {storeEmployees.map((employee) => (
-                      <TableRow key={employee.id}>
-                        <TableCell className="font-medium">{employee.name}</TableCell>
-                        <TableCell>{employee.email}</TableCell>
-                        <TableCell>
-                          <Badge className="capitalize">{employee.role}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          {employee.salary ? formatCurrency(employee.salary) : "-"}
-                        </TableCell>
-                        <TableCell>
-                          {new Date(employee.joinDate).toLocaleDateString('id-ID')}
-                        </TableCell>
+                {employeesError && (
+                  <div className="p-4 mb-4 bg-red-50 border border-red-200 rounded-md">
+                    <p className="text-red-700 text-sm">Error loading employees: {(employeesError as any)?.message}</p>
+                  </div>
+                )}
+                {employeesLoading && (
+                  <div className="flex items-center justify-center p-8">
+                    <p className="text-gray-500">Loading employees...</p>
+                  </div>
+                )}
+                {!employeesLoading && storeEmployees.length === 0 && !employeesError && (
+                  <div className="text-center p-8">
+                    <Users className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                    <p className="text-gray-500">No employees found in this store</p>
+                    <p className="text-sm text-gray-400 mt-1">Employees need to be assigned to this store</p>
+                  </div>
+                )}
+
+                {!employeesLoading && storeEmployees.length > 0 && (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Role</TableHead>
+                        <TableHead>Salary</TableHead>
+                        <TableHead>Join Date</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {storeEmployees.map((employee) => (
+                        <TableRow key={employee.id} data-testid={`row-employee-${employee.id}`}>
+                          <TableCell className="font-medium" data-testid={`text-employee-name-${employee.id}`}>
+                            {employee.name}
+                          </TableCell>
+                          <TableCell data-testid={`text-employee-email-${employee.id}`}>
+                            {employee.email}
+                          </TableCell>
+                          <TableCell>
+                            <Badge className="capitalize" data-testid={`badge-employee-role-${employee.id}`}>
+                              {employee.role}
+                            </Badge>
+                          </TableCell>
+                          <TableCell data-testid={`text-employee-salary-${employee.id}`}>
+                            {employee.salary ? formatCurrency(employee.salary) : "-"}
+                          </TableCell>
+                          <TableCell data-testid={`text-employee-joindate-${employee.id}`}>
+                            {new Date(employee.joinDate).toLocaleDateString('id-ID')}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
         )}
+
+        {/* Edit Store Dialog */}
+        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Edit className="h-5 w-5" />
+                Edit Store: {editingStore?.name}
+              </DialogTitle>
+            </DialogHeader>
+            
+            <Form {...editForm}>
+              <form onSubmit={editForm.handleSubmit(onEditStore)} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={editForm.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Store Name</FormLabel>
+                        <FormControl>
+                          <Input 
+                            placeholder="Enter store name" 
+                            data-testid="input-edit-store-name"
+                            {...field} 
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={editForm.control}
+                    name="phone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Phone Number</FormLabel>
+                        <FormControl>
+                          <Input 
+                            placeholder="Enter phone number" 
+                            data-testid="input-edit-store-phone"
+                            {...field} 
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={editForm.control}
+                    name="manager"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Manager Name</FormLabel>
+                        <FormControl>
+                          <Input 
+                            placeholder="Enter manager name" 
+                            data-testid="input-edit-store-manager"
+                            {...field} 
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={editForm.control}
+                  name="address"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Address</FormLabel>
+                      <FormControl>
+                        <Textarea 
+                          placeholder="Enter store address" 
+                          data-testid="input-edit-store-address"
+                          {...field} 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={editForm.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Description</FormLabel>
+                      <FormControl>
+                        <Textarea 
+                          placeholder="Enter store description" 
+                          data-testid="input-edit-store-description"
+                          {...field} 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="flex gap-2 justify-end">
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={closeEditDialog}
+                    data-testid="button-cancel-edit"
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    type="submit" 
+                    disabled={updateStoreMutation.isPending}
+                    data-testid="button-save-edit"
+                  >
+                    {updateStoreMutation.isPending ? "Saving..." : "Save Changes"}
+                  </Button>
+                </div>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
       </Tabs>
     </div>
   );

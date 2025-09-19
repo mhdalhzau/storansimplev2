@@ -52,9 +52,10 @@ const ATTENDANCE_STATUS_OPTIONS = [
 ];
 
 const SHIFT_OPTIONS = [
-  { value: "pagi", label: "Pagi (08:00-17:00)" },
+  { value: "pagi", label: "Pagi (07:00-17:00)" },
   { value: "siang", label: "Siang (12:00-21:00)" },
   { value: "malam", label: "Malam (22:00-07:00)" },
+  { value: "full-day", label: "Malam (22:00-07:00)" },
 ];
 
 export default function AttendanceDetailPage() {

@@ -160,8 +160,8 @@ export default function StaffPage() {
     },
     onSuccess: () => {
       toast({
-        title: "✅ Berhasil Disimpan",
-        description: "Data berhasil disimpan ke attendance, sales, cashflow, dan setoran",
+        title: "✅ Berhasil di-copy",
+        description: "Data berhasil di copy silahkan paste di laporan pesan anda",
         variant: "default",
       });
       
@@ -236,13 +236,13 @@ export default function StaffPage() {
       setShowValidation(false);
       toast({
         title: "✅ Validasi Berhasil",
-        description: "Password benar! Sekarang Anda dapat mengirim data",
+        description: "Nama benar! Sekarang Anda dapat copy data",
         variant: "default",
       });
     } else {
       toast({
         title: "❌ Validasi Gagal", 
-        description: "Password harus sama dengan nama Anda",
+        description: "Nama harus sama dengan nama Anda",
         variant: "destructive",
       });
     }
@@ -1044,14 +1044,14 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
           <CardContent className="pt-6">
             <div className="space-y-4">
               <Label className="text-lg font-semibold flex items-center gap-2">
-                🔐 Validasi Password
+                🔐 Validasi Data
                 {isValidated && <span className="text-green-600 text-sm">(✅ Tervalidasi)</span>}
               </Label>
               
               {!isValidated && (
                 <div className="space-y-3">
                   <p className="text-sm text-gray-600">
-                    Masukkan nama Anda sebagai password untuk validasi sebelum mengirim data
+                    Masukkan nama Anda untuk validasi sebelum copy data
                   </p>
                   <div className="flex gap-2">
                     <Input
@@ -1080,7 +1080,7 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
               
               {isValidated && (
                 <div className="flex items-center gap-2 text-green-600">
-                  <span className="text-sm">Password tervalidasi untuk: {employeeName}</span>
+                  <span className="text-sm">Data tervalidasi untuk: {employeeName}</span>
                   <Button 
                     size="sm" 
                     variant="outline"
@@ -1108,12 +1108,12 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
             data-testid="button-copy-and-save"
           >
             <Copy className="h-5 w-5" />
-            {submitDataMutation.isPending ? "Memproses..." : "Copy + Simpan Data (PU)"}
+            {submitDataMutation.isPending ? "Memproses..." : "Copy to clipboard"}
           </Button>
           
           {!isValidated && selectedStaffName && (
             <p className="text-sm text-red-600 text-center">
-              ⚠️ Validasi password diperlukan sebelum mengirim data
+              ⚠️ Validasi Nama diperlukan sebelum copy data
             </p>
           )}
         </div>

@@ -856,7 +856,7 @@ export default function SalesContent() {
                   <TableHead>Tanggal</TableHead>
                   <TableHead>Hari Ini</TableHead>
                   <TableHead>Store</TableHead>
-                  <TableHead>Total Transaksi</TableHead>
+                  <TableHead>Total Liter</TableHead>
                   <TableHead>Total Penjualan</TableHead>
                   <TableHead>Total QRIS</TableHead>
                   <TableHead>Total Cash</TableHead>
@@ -891,7 +891,7 @@ export default function SalesContent() {
                         {record.storeId === 1 ? "Main Store" : "Branch Store"}
                       </TableCell>
                       <TableCell className="text-center font-medium">
-                        {record.transactions}
+                         {record.totalLiters || "0"} L
                       </TableCell>
                       <TableCell className="font-semibold text-green-700">
                         {formatRupiah(record.totalSales)}
