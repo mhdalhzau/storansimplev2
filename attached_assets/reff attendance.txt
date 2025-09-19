@@ -1,0 +1,296 @@
+import React, { useState, useEffect } from "react";
+
+const employees = [
+  { id: 1, name: "Budi", store: "Store A", shift: "Pagi" },
+  { id: 2, name: "Siti", store: "Store B", shift: "Siang" },
+  { id: 3, name: "Tono", store: "Store A", shift: "Malam" },
+];
+
+const AbsensiApp = () => {
+  const [view, setView] = useState("list");
+  const [currentEmp, setCurrentEmp] = useState(null);
+  const [month, setMonth] = useState(new Date().getMonth());
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [dataStore, setDataStore] = useState({});
+  const [rows, setRows] = useState([]);
+
+  const daysInMonth = (m, y) => new Date(y, m + 1, 0).getDate();
+  const dayName = (y, m, d) =>
+    new Date(y, m, d).toLocaleDateString("id-ID", { weekday: "long" });
+  const monthName = (m, y) =>
+    new Date(y, m, 1).toLocaleDateString("id-ID", {
+      month: "long",
+      year: "numeric",
+    });
+
+  const timeToMinutes = (t) => {
+    if (!t) return null;
+    const [h, m] = t.split(":").map(Number);
+    return h * 60 + m;
+  };
+
+  const loadMonth = (emp) => {
+    const key = `${emp.id}-${year}-${month}`;
+    if (!dataStore[key]) {
+      const days = daysInMonth(month, year);
+      const init = [];
+      for (let d = 1; d <= days; d++) {
+        init.push({
+          tgl: `${d}/${month + 1}/${year}`,
+          hari: dayName(year, month, d),
+          shift: emp.shift,
+          in: "",
+          out: "",
+          telat: 0,
+          lembur: 0,
+          status: "",
+          note: "",
+        });
+      }
+      setDataStore((prev) => ({ ...prev, [key]: init }));
+      setRows(init);
+    } else {
+      setRows([...dataStore[key]]);
+    }
+  };
+
+  const openDetail = (emp) => {
+    setCurrentEmp(emp);
+    loadMonth(emp);
+    setView("detail");
+  };
+
+  const backToList = () => setView("list");
+
+  const changeMonth = (step) => {
+    let newMonth = month + step;
+    let newYear = year;
+    if (newMonth < 0) {
+      newMonth = 11;
+      newYear--;
+    }
+    if (newMonth > 11) {
+      newMonth = 0;
+      newYear++;
+    }
+    setMonth(newMonth);
+    setYear(newYear);
+    if (currentEmp) loadMonth(currentEmp);
+  };
+
+  const changeYear = (y) => {
+    setYear(parseInt(y));
+    if (currentEmp) loadMonth(currentEmp);
+  };
+
+  const updateRow = (i, field, value) => {
+    const newRows = [...rows];
+    newRows[i][field] = value;
+
+    // hitung telat & lembur
+    if (field === "in" || field === "out" || field === "status") {
+      const masuk = timeToMinutes(newRows[i].in);
+      const keluar = timeToMinutes(newRows[i].out);
+      let telat = 0,
+        lembur = 0;
+      const normalIn = 8 * 60,
+        normalOut = 17 * 60;
+      if (newRows[i].status === "Hadir") {
+        if (masuk && masuk > normalIn) telat = masuk - normalIn;
+        if (keluar && keluar > normalOut) lembur = keluar - normalOut;
+      }
+      newRows[i].telat = telat;
+      newRows[i].lembur = lembur;
+    }
+
+    setRows(newRows);
+  };
+
+  const saveData = () => {
+    const key = `${currentEmp.id}-${year}-${month}`;
+    setDataStore((prev) => ({ ...prev, [key]: [...rows] }));
+    alert("Data tersimpan!");
+  };
+
+  const cancelEdit = () => {
+    if (currentEmp) loadMonth(currentEmp);
+  };
+
+  const exportCSV = () => {
+    let csv =
+      "Tanggal,Hari,Shift,Jam Masuk,Jam Keluar,Telat,Lembur,Status,Keterangan\n";
+    rows.forEach((r) => {
+      csv += `${r.tgl},${r.hari},${r.shift},${r.in},${r.out},${r.telat},${r.lembur},${r.status},${r.note}\n`;
+    });
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Absensi_${currentEmp.name}_${month + 1}-${year}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const summary = () => {
+    const hadir = rows.filter((r) => r.status === "Hadir").length;
+    const cuti = rows.filter((r) => r.status === "Cuti").length;
+    const alpha = rows.filter((r) => r.status === "Alpha").length;
+    const totalTelat = rows.reduce((a, b) => a + b.telat, 0);
+    const totalLembur = rows.reduce((a, b) => a + b.lembur, 0);
+
+    return `Total Telat: ${totalTelat} menit (${(totalTelat / 60).toFixed(
+      2
+    )} jam)
+Total Lembur: ${totalLembur} menit (${(totalLembur / 60).toFixed(2)} jam)
+Total: Hadir ${hadir}, Cuti ${cuti}, Alpha ${alpha}`;
+  };
+
+  return (
+    <div style={{ padding: "20px", fontFamily: "sans-serif" }}>
+      {view === "list" && (
+        <>
+          <h1>List Karyawan</h1>
+          <table border="1" cellPadding="4" style={{ width: "100%" }}>
+            <thead>
+              <tr>
+                <th>Nama</th>
+                <th>Store</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {employees.map((e) => (
+                <tr key={e.id}>
+                  <td>{e.name}</td>
+                  <td>{e.store}</td>
+                  <td>
+                    <button onClick={() => openDetail(e)}>Detail</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+
+      {view === "detail" && (
+        <>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <h2>
+              Absensi - {currentEmp.name} ({currentEmp.store})
+            </h2>
+            <div>
+              <button onClick={() => changeMonth(-1)}>« Sebelumnya</button>
+              <span style={{ margin: "0 8px" }}>
+                {monthName(month, year)}
+              </span>
+              <button onClick={() => changeMonth(1)}>Berikutnya »</button>
+              <select
+                value={year}
+                onChange={(e) => changeYear(e.target.value)}
+                style={{ marginLeft: "8px" }}
+              >
+                {Array.from({ length: 11 }, (_, i) => year - 5 + i).map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <table border="1" cellPadding="4" style={{ width: "100%", marginTop: "10px" }}>
+            <thead>
+              <tr>
+                <th>Tanggal</th>
+                <th>Hari</th>
+                <th>Shift</th>
+                <th>Jam Masuk</th>
+                <th>Jam Keluar</th>
+                <th>Telat (mnt)</th>
+                <th>Lembur (mnt)</th>
+                <th>Status</th>
+                <th>Keterangan</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, i) => (
+                <tr key={i}>
+                  <td>{row.tgl}</td>
+                  <td>{row.hari}</td>
+                  <td>{row.shift}</td>
+                  <td>
+                    <input
+                      type="time"
+                      value={row.in}
+                      onChange={(e) => updateRow(i, "in", e.target.value)}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="time"
+                      value={row.out}
+                      onChange={(e) => updateRow(i, "out", e.target.value)}
+                    />
+                  </td>
+                  <td>{row.telat}</td>
+                  <td>{row.lembur}</td>
+                  <td>
+                    <select
+                      value={row.status}
+                      onChange={(e) => updateRow(i, "status", e.target.value)}
+                    >
+                      <option value="">--</option>
+                      <option value="Hadir">Hadir</option>
+                      <option value="Cuti">Cuti</option>
+                      <option value="Alpha">Alpha</option>
+                    </select>
+                  </td>
+                  <td>
+                    <input
+                      type="text"
+                      value={row.note}
+                      onChange={(e) => updateRow(i, "note", e.target.value)}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div style={{ marginTop: "10px" }}>
+            <button onClick={saveData}>Simpan</button>
+            <button onClick={cancelEdit} style={{ marginLeft: "8px" }}>
+              Batal
+            </button>
+            <button onClick={exportCSV} style={{ marginLeft: "8px" }}>
+              Export CSV
+            </button>
+            <button onClick={backToList} style={{ marginLeft: "8px" }}>
+              Kembali ke List
+            </button>
+          </div>
+
+          <pre
+            style={{
+              marginTop: "10px",
+              background: "#f3f4f6",
+              padding: "8px",
+              borderRadius: "6px",
+            }}
+          >
+            {summary()}
+          </pre>
+        </>
+      )}
+    </div>
+  );
+};
+
+export default AbsensiApp;
