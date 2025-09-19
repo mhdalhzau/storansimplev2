@@ -71,110 +71,53 @@ export default function AttendanceDetailPage() {
   const [attendanceData, setAttendanceData] = useState<AttendanceRecord[]>([]);
   const [hasChanges, setHasChanges] = useState(false);
 
-  // Fetch employee data
-  const { data: employees } = useQuery<EmployeeData[]>({
-    queryKey: ["/api/users"],
-  });
-
-  // Fetch attendance data for user
-  const { data: attendanceRecords, isLoading, refetch } = useQuery<any[]>({
-    queryKey: ["/api/attendance/user", employeeId],
-    enabled: !!employeeId
-  });
-
-  // Get current employee data
-  const currentEmployee = employees?.find(emp => emp.id === employeeId);
-
-  // Update local state when data loads and generate calendar
-  useEffect(() => {
-    if (attendanceRecords && currentEmployee) {
-      // Generate calendar for the month
-      const daysInMonth = new Date(year, month, 0).getDate();
-      const monthlyData: AttendanceRecord[] = [];
-      
-      for (let day = 1; day <= daysInMonth; day++) {
-        const dateString = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
-        const dayName = new Date(year, month - 1, day).toLocaleDateString('id-ID', { weekday: 'long' });
-        
-        // Find existing attendance for this date
-        const existingRecord = attendanceRecords.find(record => {
-          const recordDate = new Date(record.date).toISOString().split('T')[0];
-          return recordDate === dateString;
-        });
-        
-        const record: AttendanceRecord = {
-          id: existingRecord?.id,
-          date: dateString,
-          day: dayName,
-          checkIn: existingRecord?.checkIn || '--:--',
-          checkOut: existingRecord?.checkOut || '--:--',
-          shift: existingRecord?.shift || 'pagi',
-          latenessMinutes: existingRecord?.latenessMinutes || 0,
-          overtimeMinutes: existingRecord?.overtimeMinutes || 0,
-          attendanceStatus: existingRecord?.attendanceStatus || 'hadir',
-          notes: existingRecord?.notes || ''
-        };
-        
-        monthlyData.push(record);
+  // Fetch monthly attendance data - using the correct API endpoint
+  const { data: monthlyData, isLoading, refetch, error } = useQuery<MonthlyAttendanceData>({
+    queryKey: [`/api/employees/${employeeId}/attendance/${year}/${month}`],
+    enabled: !!employeeId,
+    retry: (failureCount, error: any) => {
+      // Only retry on network errors, not 404 or 403 errors
+      if (error?.status === 404 || error?.status === 403) {
+        return false;
       }
-      
-      setAttendanceData(monthlyData);
+      return failureCount < 2;
+    }
+  });
+
+  // Update local state when data loads
+  useEffect(() => {
+    if (monthlyData?.attendanceData) {
+      setAttendanceData(monthlyData.attendanceData);
       setHasChanges(false);
     }
-  }, [attendanceRecords, currentEmployee, year, month]);
+  }, [monthlyData]);
 
-  // Save changes mutation
+  // Save changes mutation - using bulk update API
   const saveMutation = useMutation({
     mutationFn: async () => {
-      // Save only records that have actual check-in/out times
-      const recordsToSave = attendanceData.filter(record => 
-        record.checkIn !== '--:--' || record.checkOut !== '--:--'
-      );
-      
-      const promises = recordsToSave.map(async (record) => {
-        if (record.id) {
-          // Update existing record
-          return apiRequest('PUT', `/api/attendance/${record.id}`, {
-            checkIn: record.checkIn !== '--:--' ? record.checkIn : null,
-            checkOut: record.checkOut !== '--:--' ? record.checkOut : null,
-            shift: record.shift,
-            latenessMinutes: record.latenessMinutes,
-            overtimeMinutes: record.overtimeMinutes,
-            attendanceStatus: record.attendanceStatus,
-            notes: record.notes
-          });
-        } else if (record.checkIn !== '--:--' || record.checkOut !== '--:--') {
-          // Create new record only if there's actual time data
-          return apiRequest('POST', '/api/attendance', {
-            userId: employeeId,
-            storeId: currentEmployee?.stores?.[0]?.id || 1,
-            date: record.date,
-            checkIn: record.checkIn !== '--:--' ? record.checkIn : null,
-            checkOut: record.checkOut !== '--:--' ? record.checkOut : null,
-            shift: record.shift,
-            latenessMinutes: record.latenessMinutes,
-            overtimeMinutes: record.overtimeMinutes,
-            attendanceStatus: record.attendanceStatus,
-            notes: record.notes
-          });
-        }
+      return apiRequest('PUT', `/api/employees/${employeeId}/attendance/${year}/${month}`, {
+        attendanceData: attendanceData
       });
-      
-      await Promise.all(promises);
     },
     onSuccess: () => {
-      toast({ title: "Berhasil", description: "Data absensi berhasil disimpan" });
+      toast({ 
+        title: "Berhasil", 
+        description: "Data absensi berhasil disimpan",
+        variant: "default"
+      });
       setHasChanges(false);
       // Invalidate and refetch the data
       queryClient.invalidateQueries({
-        queryKey: ["/api/attendance/user", employeeId]
+        queryKey: [`/api/employees/${employeeId}/attendance/${year}/${month}`]
       });
       refetch();
     },
     onError: (error: any) => {
+      console.error('Save error:', error);
+      const errorMessage = error?.response?.data?.message || error?.message || "Gagal menyimpan data absensi";
       toast({ 
-        title: "Error", 
-        description: error.message || "Gagal menyimpan data absensi",
+        title: "Error Menyimpan Data", 
+        description: errorMessage,
         variant: "destructive" 
       });
     }
@@ -280,29 +223,49 @@ export default function AttendanceDetailPage() {
 
   // Export to CSV
   const exportToCSV = () => {
-    if (!currentEmployee || !attendanceData.length) return;
+    if (!monthlyData?.employee || !attendanceData.length) {
+      toast({ 
+        title: "Error Export", 
+        description: "Tidak ada data untuk diekspor",
+        variant: "destructive" 
+      });
+      return;
+    }
     
-    const headers = ['Tanggal', 'Hari', 'Jam Masuk', 'Jam Keluar', 'Shift', 'Status', 'Terlambat (menit)', 'Lembur (menit)', 'Catatan'];
-    const csvContent = [
-      headers.join(','),
-      ...attendanceData.map(record => [
-        record.date,
-        record.day,
-        record.checkIn || '',
-        record.checkOut || '',
-        record.shift || '',
-        record.attendanceStatus,
-        record.latenessMinutes.toString(),
-        record.overtimeMinutes.toString(),
-        `"${record.notes || ''}"`
-      ].join(','))
-    ].join('\n');
-    
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `absensi_${currentEmployee.name}_${year}_${month.toString().padStart(2, '0')}.csv`;
-    link.click();
+    try {
+      const headers = ['Tanggal', 'Hari', 'Jam Masuk', 'Jam Keluar', 'Shift', 'Status', 'Terlambat (menit)', 'Lembur (menit)', 'Catatan'];
+      const csvContent = [
+        headers.join(','),
+        ...attendanceData.map(record => [
+          record.date,
+          record.day,
+          record.checkIn || '',
+          record.checkOut || '',
+          record.shift || '',
+          record.attendanceStatus,
+          record.latenessMinutes.toString(),
+          record.overtimeMinutes.toString(),
+          `"${record.notes || ''}"`
+        ].join(','))
+      ].join('\n');
+      
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `absensi_${monthlyData.employee.name}_${year}_${month.toString().padStart(2, '0')}.csv`;
+      link.click();
+      
+      toast({ 
+        title: "Export Berhasil", 
+        description: "File CSV berhasil diunduh"
+      });
+    } catch (err) {
+      toast({ 
+        title: "Error Export", 
+        description: "Gagal mengekspor data ke CSV",
+        variant: "destructive" 
+      });
+    }
   };
 
   // Calculate summary statistics
@@ -327,7 +290,34 @@ export default function AttendanceDetailPage() {
     );
   }
 
-  if (!currentEmployee) {
+  // Show error state
+  if (error) {
+    const errorMessage = (error as any)?.response?.data?.message || (error as any)?.message || "Terjadi kesalahan saat memuat data";
+    return (
+      <div className="container mx-auto py-8">
+        <Card>
+          <CardContent className="p-8 text-center">
+            <h3 className="text-lg font-medium text-red-600 mb-2">
+              Error Memuat Data
+            </h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-4">
+              {errorMessage}
+            </p>
+            <div className="flex justify-center gap-4">
+              <Button onClick={() => refetch()} variant="outline">
+                Coba Lagi
+              </Button>
+              <Link href="/attendance" data-testid="button-back-to-list">
+                <Button>Kembali ke Daftar</Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!monthlyData) {
     return (
       <div className="container mx-auto py-8">
         <Card>
@@ -363,10 +353,10 @@ export default function AttendanceDetailPage() {
           </Link>
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100" data-testid="text-employee-name">
-              {currentEmployee?.name}
+              {monthlyData.employee.name}
             </h1>
             <p className="text-gray-600 dark:text-gray-400" data-testid="text-store-info">
-              {currentEmployee?.stores?.map((s: any) => s.name).join(', ')}
+              {monthlyData.employee.stores.map((s: any) => s.name).join(', ')}
             </p>
           </div>
         </div>
