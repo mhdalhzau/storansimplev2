@@ -327,6 +327,243 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // New endpoint: Convert all setoran data to sales report
+  app.post("/api/sales/import-from-setoran", async (req, res) => {
+    try {
+      if (!req.user || !['manager', 'administrasi'].includes(req.user.role)) {
+        return res.status(403).json({ message: "Access denied. Only managers and administrators can import setoran data." });
+      }
+
+      const { storeId, dateFilter } = req.body;
+      
+      // Get target store ID
+      const targetStoreId = storeId ? parseInt(storeId as string) : await getUserFirstStoreId(req.user);
+      
+      if (!targetStoreId) {
+        return res.status(400).json({ 
+          message: "Store ID is required",
+          details: "Please provide a valid store ID to import data for." 
+        });
+      }
+
+      // Verify store access
+      if (!(await hasStoreAccess(req.user, targetStoreId))) {
+        return res.status(403).json({ 
+          message: "Access denied to store",
+          details: `You don't have permission to access store ${targetStoreId}.` 
+        });
+      }
+
+      let importResults = {
+        success: 0,
+        errors: 0,
+        skipped: 0,
+        details: [] as any[],
+        totalProcessed: 0
+      };
+
+      // Fetch setoran data from Python API
+      try {
+        console.log('Fetching setoran data from Python API...');
+        
+        // Build query params for filtering by date if provided
+        const queryParams = new URLSearchParams();
+        if (dateFilter) {
+          queryParams.append('date_filter', dateFilter);
+        }
+        
+        const setoranUrl = `http://localhost:8000/api/setoran${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+        console.log(`Calling: ${setoranUrl}`);
+        
+        const response = await fetch(setoranUrl, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          timeout: 10000 // 10 seconds timeout
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`Python API error: ${response.status} - ${errorText}`);
+          return res.status(502).json({ 
+            message: "Failed to fetch setoran data",
+            details: `Python API returned ${response.status}: ${errorText}`,
+            pythonApiError: true
+          });
+        }
+
+        const setoranData = await response.json();
+        console.log(`Fetched ${setoranData.length} setoran records`);
+
+        if (!Array.isArray(setoranData)) {
+          return res.status(502).json({ 
+            message: "Invalid data format from setoran API",
+            details: "Expected array of setoran records but received different format" 
+          });
+        }
+
+        if (setoranData.length === 0) {
+          return res.status(200).json({
+            message: "No setoran data found to import",
+            results: importResults
+          });
+        }
+
+        importResults.totalProcessed = setoranData.length;
+
+        // Process each setoran record and convert to sales
+        for (let i = 0; i < setoranData.length; i++) {
+          const setoran = setoranData[i];
+          
+          try {
+            // Validate required fields
+            if (!setoran.employee_name || !setoran.total_keseluruhan || !setoran.created_at) {
+              importResults.skipped++;
+              importResults.details.push({
+                index: i,
+                employeeName: setoran.employee_name || 'Unknown',
+                status: 'skipped',
+                reason: 'Missing required fields (employee_name, total_keseluruhan, or created_at)'
+              });
+              continue;
+            }
+
+            // Calculate sales metrics from setoran data
+            const salesData = convertSetoranToSales(setoran, targetStoreId);
+            
+            // Validate the converted data
+            const validatedSalesData = insertSalesSchema.parse(salesData);
+
+            // Save to sales database
+            const savedSales = await storage.createSales(validatedSalesData);
+            
+            importResults.success++;
+            importResults.details.push({
+              index: i,
+              employeeName: setoran.employee_name,
+              status: 'success',
+              salesId: savedSales.id,
+              totalSales: salesData.totalSales,
+              transactions: salesData.transactions,
+              date: salesData.date
+            });
+
+            console.log(`Successfully converted setoran ${i + 1}/${setoranData.length} (Employee: ${setoran.employee_name})`);
+
+          } catch (error: any) {
+            importResults.errors++;
+            importResults.details.push({
+              index: i,
+              employeeName: setoran.employee_name || 'Unknown',
+              status: 'error',
+              error: error.message,
+              reason: 'Failed to convert or save sales data'
+            });
+            console.error(`Error processing setoran ${i + 1}:`, error.message);
+          }
+        }
+
+        // Return comprehensive results
+        return res.status(200).json({
+          message: `Import completed. ${importResults.success} successful, ${importResults.errors} errors, ${importResults.skipped} skipped.`,
+          results: importResults,
+          summary: {
+            totalProcessed: importResults.totalProcessed,
+            successful: importResults.success,
+            errors: importResults.errors,
+            skipped: importResults.skipped,
+            successRate: importResults.totalProcessed > 0 
+              ? Math.round((importResults.success / importResults.totalProcessed) * 100) + '%'
+              : '0%'
+          }
+        });
+
+      } catch (fetchError: any) {
+        console.error('Error fetching from Python API:', fetchError);
+        
+        if (fetchError.code === 'ECONNREFUSED') {
+          return res.status(503).json({ 
+            message: "Python API is not available",
+            details: "The setoran API server (port 8000) is not running. Please start the Python backend first.",
+            suggestion: "Run: python run_python_api.py"
+          });
+        }
+        
+        return res.status(502).json({ 
+          message: "Failed to connect to setoran API",
+          details: fetchError.message,
+          suggestion: "Check if the Python API is running on port 8000"
+        });
+      }
+
+    } catch (error: any) {
+      console.error('Import setoran to sales error:', error);
+      return res.status(500).json({ 
+        message: "Internal server error during import",
+        details: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
+    }
+  });
+
+  // Helper function to convert setoran data to sales format
+  function convertSetoranToSales(setoran: any, storeId: number): any {
+    // Parse expenses and income from JSON strings if needed
+    let expenses = [];
+    let income = [];
+    
+    try {
+      if (typeof setoran.expenses_data === 'string') {
+        expenses = JSON.parse(setoran.expenses_data || '[]');
+      } else if (Array.isArray(setoran.expenses)) {
+        expenses = setoran.expenses;
+      }
+    } catch (e) {
+      console.warn('Failed to parse expenses data:', e);
+      expenses = [];
+    }
+
+    try {
+      if (typeof setoran.income_data === 'string') {
+        income = JSON.parse(setoran.income_data || '[]');
+      } else if (Array.isArray(setoran.income)) {
+        income = setoran.income;
+      }
+    } catch (e) {
+      console.warn('Failed to parse income data:', e);
+      income = [];
+    }
+
+    // Calculate sales metrics
+    const totalSales = parseFloat(setoran.total_keseluruhan || setoran.total_setoran || '0');
+    
+    // Count transactions - assume 1 main fuel transaction + number of income items
+    const fuelTransactionCount = setoran.total_liter && setoran.total_liter > 0 ? 1 : 0;
+    const incomeTransactionCount = income.length || 0;
+    const transactions = fuelTransactionCount + incomeTransactionCount;
+    
+    // Calculate average ticket
+    const averageTicket = transactions > 0 ? totalSales / transactions : 0;
+
+    // Convert date
+    let salesDate;
+    if (setoran.created_at) {
+      salesDate = new Date(setoran.created_at);
+    } else {
+      salesDate = new Date(); // fallback to current date
+    }
+
+    return {
+      storeId: storeId,
+      date: salesDate,
+      totalSales: totalSales.toString(),
+      transactions: transactions,
+      averageTicket: averageTicket.toString()
+    };
+  }
+
   app.get("/api/export/pdf", async (req, res) => {
     try {
       if (!req.user || !['manager', 'administrasi'].includes(req.user.role)) {
