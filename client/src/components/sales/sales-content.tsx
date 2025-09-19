@@ -1,16 +1,18 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileDown, FileSpreadsheet, TrendingUp } from "lucide-react";
+import { FileDown, FileSpreadsheet, TrendingUp, Upload, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import { type Sales } from "@shared/schema";
 
 export default function SalesContent() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [selectedStore, setSelectedStore] = useState("all");
@@ -18,6 +20,47 @@ export default function SalesContent() {
   const { data: salesRecords, isLoading } = useQuery<Sales[]>({
     queryKey: ["/api/sales", { startDate, endDate, storeId: selectedStore !== "all" ? selectedStore : undefined }],
   });
+
+  // Import mutation for setoran data
+  const importMutation = useMutation({
+    mutationFn: async (data: { storeId?: string; dateFilter?: string }) => {
+      const res = await apiRequest("POST", "/api/sales/import-from-setoran", data);
+      return await res.json();
+    },
+    onSuccess: (data) => {
+      // Invalidate sales query to refresh data
+      queryClient.invalidateQueries({ queryKey: ['/api/sales'] });
+      
+      toast({
+        title: "Import Completed Successfully!",
+        description: `${data.results?.successful || 0} records imported successfully${data.results?.errors > 0 ? `, ${data.results.errors} errors` : ''}${data.results?.skipped > 0 ? `, ${data.results.skipped} skipped` : ''}.`,
+        variant: "default",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Import Failed",
+        description: error.message || "Failed to import setoran data to sales report",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleImportSetoran = async () => {
+    const importData: { storeId?: string; dateFilter?: string } = {};
+    
+    // Add store filter if specific store is selected
+    if (selectedStore !== "all") {
+      importData.storeId = selectedStore;
+    }
+    
+    // Add date filter if provided (use startDate as the filter)
+    if (startDate) {
+      importData.dateFilter = startDate;
+    }
+    
+    importMutation.mutate(importData);
+  };
 
   const handleExportPDF = async () => {
     try {
@@ -116,6 +159,20 @@ export default function SalesContent() {
                 <SelectItem value="2">Branch Store</SelectItem>
               </SelectContent>
             </Select>
+            <Button
+              variant="outline"
+              onClick={handleImportSetoran}
+              disabled={importMutation.isPending}
+              className="text-blue-600 border-blue-200 hover:bg-blue-50"
+              data-testid="button-import-setoran"
+            >
+              {importMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Upload className="h-4 w-4 mr-2" />
+              )}
+              {importMutation.isPending ? "Importing..." : "Import from Setoran"}
+            </Button>
             <Button
               variant="outline"
               onClick={handleExportPDF}
