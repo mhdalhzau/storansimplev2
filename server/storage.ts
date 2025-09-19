@@ -197,6 +197,9 @@ export class MemStorage implements IStorage {
       createdAt: new Date()
     };
     this.users.set(manager.id, manager);
+    
+    // Assign manager to stores
+    await this.assignUserToStores(manager.id, [1, 2]);
 
     // Administrator account
     const adminPassword = await hashPassword("admin123");
