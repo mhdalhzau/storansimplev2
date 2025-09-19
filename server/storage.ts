@@ -68,6 +68,7 @@ export interface IStorage {
   getSales(id: string): Promise<Sales | undefined>;
   getSalesByStore(storeId: number, startDate?: string, endDate?: string): Promise<Sales[]>;
   createSales(sales: InsertSales): Promise<Sales>;
+  deleteSales(id: string): Promise<void>;
   checkDailySubmission(userId: string, storeId: number, date: string): Promise<boolean>;
   
   // Cashflow methods
@@ -548,6 +549,10 @@ export class MemStorage implements IStorage {
     };
     this.salesRecords.set(id, record);
     return record;
+  }
+
+  async deleteSales(id: string): Promise<void> {
+    this.salesRecords.delete(id);
   }
 
   async checkDailySubmission(userId: string, storeId: number, date: string): Promise<boolean> {
