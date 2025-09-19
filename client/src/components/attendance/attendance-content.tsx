@@ -9,20 +9,23 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { type User } from "@shared/schema";
-import { UserCheck, ChevronLeft, ChevronRight, Save, Download, RotateCcw } from "lucide-react";
+import { type User, type Attendance } from "@shared/schema";
+import { UserCheck, ChevronLeft, ChevronRight, Save, Download, RotateCcw, Edit2 } from "lucide-react";
+import { detectShift, calculateLateness, calculateOvertime } from "@shared/attendance-utils";
 
 // Types untuk attendance record
 interface AttendanceRecord {
-  tgl: string;
-  hari: string;
+  id?: string;
+  date: string;
+  day: string;
   shift: string;
-  in: string;
-  out: string;
-  telat: number;
-  lembur: number;
+  checkIn: string;
+  checkOut: string;
+  latenessMinutes: number;
+  overtimeMinutes: number;
+  attendanceStatus: string;
+  notes: string;
   status: string;
-  note: string;
 }
 
 export default function AttendanceContent() {
@@ -32,12 +35,72 @@ export default function AttendanceContent() {
   const [currentEmp, setCurrentEmp] = useState<User | null>(null);
   const [month, setMonth] = useState(new Date().getMonth());
   const [year, setYear] = useState(new Date().getFullYear());
-  const [dataStore, setDataStore] = useState<Record<string, AttendanceRecord[]>>({});
   const [rows, setRows] = useState<AttendanceRecord[]>([]);
+  const [hasChanges, setHasChanges] = useState(false);
+
+  // Check user permissions - only finance and manager can edit
+  const canEdit = user?.role === 'manager' || user?.role === 'administrasi';
 
   // Get all employees for the list
   const { data: employees, isLoading: isLoadingEmployees } = useQuery<User[]>({
     queryKey: ["/api/users"],
+  });
+
+  // Get attendance data for selected employee and month
+  const { data: attendanceData, refetch: refetchAttendance } = useQuery<Attendance[]>({
+    queryKey: ["/api/attendance/user", currentEmp?.id, { date: `${year}-${(month + 1).toString().padStart(2, '0')}` }],
+    enabled: !!currentEmp?.id,
+  });
+
+  // Save attendance mutation
+  const saveAttendanceMutation = useMutation({
+    mutationFn: async (data: { attendanceRecords: AttendanceRecord[] }) => {
+      const promises = data.attendanceRecords.map(async (record) => {
+        if (record.id) {
+          // Update existing attendance
+          return apiRequest("PUT", `/api/attendance/${record.id}`, {
+            checkIn: record.checkIn,
+            checkOut: record.checkOut,
+            shift: record.shift,
+            latenessMinutes: record.latenessMinutes,
+            overtimeMinutes: record.overtimeMinutes,
+            attendanceStatus: record.attendanceStatus,
+            notes: record.notes,
+          });
+        } else {
+          // Create new attendance record
+          return apiRequest("POST", "/api/attendance", {
+            userId: currentEmp?.id,
+            storeId: 1, // Default store, should be dynamic
+            date: record.date,
+            checkIn: record.checkIn,
+            checkOut: record.checkOut,
+            shift: record.shift,
+            latenessMinutes: record.latenessMinutes,
+            overtimeMinutes: record.overtimeMinutes,
+            attendanceStatus: record.attendanceStatus,
+            notes: record.notes,
+          });
+        }
+      });
+      await Promise.all(promises);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Berhasil",
+        description: "Data absensi berhasil disimpan!",
+      });
+      setHasChanges(false);
+      refetchAttendance();
+      queryClient.invalidateQueries({ queryKey: ["/api/attendance"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Gagal menyimpan data absensi",
+        variant: "destructive",
+      });
+    },
   });
 
   // Helper functions
@@ -52,47 +115,60 @@ export default function AttendanceContent() {
       year: "numeric",
     });
 
-  const timeToMinutes = (t: string) => {
-    if (!t) return null;
-    const [h, m] = t.split(":").map(Number);
-    return h * 60 + m;
-  };
-
   // Load month data for employee
   const loadMonth = (emp: User) => {
-    const key = `${emp.id}-${year}-${month}`;
-    if (!dataStore[key]) {
-      const days = daysInMonth(month, year);
-      const init: AttendanceRecord[] = [];
-      for (let d = 1; d <= days; d++) {
-        init.push({
-          tgl: `${d}/${month + 1}/${year}`,
-          hari: dayName(year, month, d),
-          shift: "Pagi",
-          in: "",
-          out: "",
-          telat: 0,
-          lembur: 0,
-          status: "",
-          note: "",
-        });
-      }
-      setDataStore((prev) => ({ ...prev, [key]: init }));
-      setRows(init);
-    } else {
-      setRows([...dataStore[key]]);
+    if (!emp) return;
+    
+    const days = daysInMonth(month, year);
+    const monthData: AttendanceRecord[] = [];
+    
+    for (let d = 1; d <= days; d++) {
+      const dateStr = `${year}-${(month + 1).toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}`;
+      
+      // Find existing attendance for this date
+      const existingAttendance = attendanceData?.find(att => {
+        const attDate = new Date(att.date || "").toISOString().split('T')[0];
+        return attDate === dateStr;
+      });
+
+      monthData.push({
+        id: existingAttendance?.id,
+        date: dateStr,
+        day: dayName(year, month, d),
+        shift: existingAttendance?.shift || "pagi",
+        checkIn: existingAttendance?.checkIn || "",
+        checkOut: existingAttendance?.checkOut || "",
+        latenessMinutes: existingAttendance?.latenessMinutes || 0,
+        overtimeMinutes: existingAttendance?.overtimeMinutes || 0,
+        attendanceStatus: existingAttendance?.attendanceStatus || "",
+        notes: existingAttendance?.notes || "",
+        status: existingAttendance?.status || "pending",
+      });
     }
+    
+    setRows(monthData);
+    setHasChanges(false);
   };
+
+  // Effect to load month data when attendance data changes
+  useEffect(() => {
+    if (currentEmp && attendanceData !== undefined) {
+      loadMonth(currentEmp);
+    }
+  }, [currentEmp, attendanceData, month, year]);
 
   // Open detail view
   const openDetail = (emp: User) => {
     setCurrentEmp(emp);
-    loadMonth(emp);
     setView("detail");
   };
 
   // Back to list
-  const backToList = () => setView("list");
+  const backToList = () => {
+    setView("list");
+    setCurrentEmp(null);
+    setHasChanges(false);
+  };
 
   // Change month navigation
   const changeMonth = (step: number) => {
@@ -108,61 +184,76 @@ export default function AttendanceContent() {
     }
     setMonth(newMonth);
     setYear(newYear);
-    if (currentEmp) loadMonth(currentEmp);
   };
 
   // Change year
   const changeYear = (y: string) => {
     setYear(parseInt(y));
-    if (currentEmp) loadMonth(currentEmp);
   };
 
   // Update row data
   const updateRow = (i: number, field: keyof AttendanceRecord, value: string | number) => {
+    if (!canEdit) {
+      toast({
+        title: "Akses Ditolak",
+        description: "Hanya manager dan administrasi yang dapat mengedit data absensi",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const newRows = [...rows];
     newRows[i] = { ...newRows[i], [field]: value };
 
-    // Hitung telat & lembur
-    if (field === "in" || field === "out" || field === "status") {
-      const masuk = timeToMinutes(newRows[i].in);
-      const keluar = timeToMinutes(newRows[i].out);
-      let telat = 0,
-        lembur = 0;
-      const normalIn = 8 * 60, // 08:00
-        normalOut = 17 * 60; // 17:00
-      if (newRows[i].status === "Hadir") {
-        if (masuk && masuk > normalIn) telat = masuk - normalIn;
-        if (keluar && keluar > normalOut) lembur = keluar - normalOut;
+    // Auto-calculate lateness and overtime when times are updated
+    if (field === "checkIn" || field === "checkOut" || field === "shift") {
+      if (newRows[i].checkIn && newRows[i].checkOut) {
+        const shift = field === "shift" ? value as string : newRows[i].shift;
+        const checkIn = field === "checkIn" ? value as string : newRows[i].checkIn;
+        const checkOut = field === "checkOut" ? value as string : newRows[i].checkOut;
+        
+        newRows[i].shift = shift;
+        newRows[i].latenessMinutes = calculateLateness(checkIn, shift);
+        newRows[i].overtimeMinutes = calculateOvertime(checkOut, shift);
       }
-      newRows[i].telat = telat;
-      newRows[i].lembur = lembur;
     }
 
     setRows(newRows);
+    setHasChanges(true);
   };
 
   // Save data
   const saveData = () => {
-    if (!currentEmp) return;
-    const key = `${currentEmp.id}-${year}-${month}`;
-    setDataStore((prev) => ({ ...prev, [key]: [...rows] }));
-    toast({
-      title: "Berhasil",
-      description: "Data absensi berhasil disimpan!",
-    });
+    if (!canEdit) {
+      toast({
+        title: "Akses Ditolak",
+        description: "Hanya manager dan administrasi yang dapat menyimpan data absensi",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const recordsToSave = rows.filter(row => 
+      row.checkIn || row.checkOut || row.attendanceStatus
+    );
+
+    saveAttendanceMutation.mutate({ attendanceRecords: recordsToSave });
   };
 
   // Cancel edit
   const cancelEdit = () => {
-    if (currentEmp) loadMonth(currentEmp);
+    if (currentEmp) {
+      loadMonth(currentEmp);
+    }
+    setHasChanges(false);
   };
 
   // Export CSV
   const exportCSV = () => {
     if (!currentEmp) return;
-    let csv = "Tanggal,Hari,Shift,Jam Masuk,Jam Keluar,Telat,Lembur,Status,Keterangan\n";
+    let csv = "Tanggal,Hari,Shift,Jam Masuk,Jam Keluar,Telat (menit),Lembur (menit),Status,Keterangan\n";
     rows.forEach((r) => {
-      csv += `${r.tgl},${r.hari},${r.shift},${r.in},${r.out},${r.telat},${r.lembur},${r.status},${r.note}\n`;
+      csv += `${r.date},${r.day},${r.shift},${r.checkIn},${r.checkOut},${r.latenessMinutes},${r.overtimeMinutes},${r.attendanceStatus},${r.notes}\n`;
     });
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -175,11 +266,11 @@ export default function AttendanceContent() {
 
   // Calculate summary
   const summary = () => {
-    const hadir = rows.filter((r) => r.status === "Hadir").length;
-    const cuti = rows.filter((r) => r.status === "Cuti").length;
-    const alpha = rows.filter((r) => r.status === "Alpha").length;
-    const totalTelat = rows.reduce((a, b) => a + b.telat, 0);
-    const totalLembur = rows.reduce((a, b) => a + b.lembur, 0);
+    const hadir = rows.filter((r) => r.attendanceStatus === "hadir").length;
+    const cuti = rows.filter((r) => r.attendanceStatus === "cuti").length;
+    const alpha = rows.filter((r) => r.attendanceStatus === "alpha").length;
+    const totalTelat = rows.reduce((a, b) => a + b.latenessMinutes, 0);
+    const totalLembur = rows.reduce((a, b) => a + b.overtimeMinutes, 0);
 
     return `Total Telat: ${totalTelat} menit (${(totalTelat / 60).toFixed(2)} jam)
 Total Lembur: ${totalLembur} menit (${(totalLembur / 60).toFixed(2)} jam)
@@ -197,6 +288,13 @@ Total: Hadir ${hadir}, Cuti ${cuti}, Alpha ${alpha}`;
               Daftar Karyawan
             </CardTitle>
             <p className="text-muted-foreground">Pilih karyawan untuk melihat detail absensi</p>
+            {!canEdit && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                <p className="text-yellow-800 text-sm">
+                  ℹ️ Anda hanya dapat melihat data. Hanya manager dan administrasi yang dapat mengedit absensi.
+                </p>
+              </div>
+            )}
           </CardHeader>
           <CardContent>
             {isLoadingEmployees ? (
@@ -208,7 +306,7 @@ Total: Hadir ${hadir}, Cuti ${cuti}, Alpha ${alpha}`;
                     <TableRow>
                       <TableHead>Nama</TableHead>
                       <TableHead>Email</TableHead>
-                      <TableHead>Store</TableHead>
+                      <TableHead>Role</TableHead>
                       <TableHead>Aksi</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -235,7 +333,8 @@ Total: Hadir ${hadir}, Cuti ${cuti}, Alpha ${alpha}`;
                             onClick={() => openDetail(employee)}
                             data-testid={`button-detail-${employee.id}`}
                           >
-                            Detail Absensi
+                            <Edit2 className="h-4 w-4 mr-1" />
+                            {canEdit ? "Edit Absensi" : "Lihat Absensi"}
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -264,6 +363,7 @@ Total: Hadir ${hadir}, Cuti ${cuti}, Alpha ${alpha}`;
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-bold">
               Absensi - {currentEmp?.name}
+              {!canEdit && <span className="text-sm text-muted-foreground ml-2">(View Only)</span>}
             </h2>
             <div className="flex items-center gap-2">
               <Button 
@@ -304,6 +404,19 @@ Total: Hadir ${hadir}, Cuti ${cuti}, Alpha ${alpha}`;
         </CardContent>
       </Card>
 
+      {/* Permission warning */}
+      {!canEdit && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+              <p className="text-yellow-800 text-sm">
+                ℹ️ Anda hanya dapat melihat data. Hanya manager dan administrasi yang dapat mengedit data absensi.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Attendance table */}
       <Card>
         <CardContent className="p-6">
@@ -325,60 +438,81 @@ Total: Hadir ${hadir}, Cuti ${cuti}, Alpha ${alpha}`;
               <TableBody>
                 {rows.map((row, i) => (
                   <TableRow key={i}>
-                    <TableCell className="font-medium">{row.tgl}</TableCell>
-                    <TableCell>{row.hari}</TableCell>
-                    <TableCell>{row.shift}</TableCell>
+                    <TableCell className="font-medium">
+                      {new Date(row.date).getDate()}
+                    </TableCell>
+                    <TableCell>{row.day}</TableCell>
+                    <TableCell>
+                      <Select
+                        value={row.shift}
+                        onValueChange={(value) => updateRow(i, "shift", value)}
+                        disabled={!canEdit}
+                      >
+                        <SelectTrigger className="w-24">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pagi">Pagi</SelectItem>
+                          <SelectItem value="siang">Siang</SelectItem>
+                          <SelectItem value="malam">Malam</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
                     <TableCell>
                       <Input
                         type="time"
-                        value={row.in}
-                        onChange={(e) => updateRow(i, "in", e.target.value)}
+                        value={row.checkIn}
+                        onChange={(e) => updateRow(i, "checkIn", e.target.value)}
                         className="w-32"
+                        disabled={!canEdit}
                         data-testid={`input-checkin-${i}`}
                       />
                     </TableCell>
                     <TableCell>
                       <Input
                         type="time"
-                        value={row.out}
-                        onChange={(e) => updateRow(i, "out", e.target.value)}
+                        value={row.checkOut}
+                        onChange={(e) => updateRow(i, "checkOut", e.target.value)}
                         className="w-32"
+                        disabled={!canEdit}
                         data-testid={`input-checkout-${i}`}
                       />
                     </TableCell>
                     <TableCell>
-                      <span className={row.telat > 0 ? "text-red-600 font-medium" : ""}>
-                        {row.telat}
+                      <span className={row.latenessMinutes > 0 ? "text-red-600 font-medium" : ""}>
+                        {row.latenessMinutes}
                       </span>
                     </TableCell>
                     <TableCell>
-                      <span className={row.lembur > 0 ? "text-blue-600 font-medium" : ""}>
-                        {row.lembur}
+                      <span className={row.overtimeMinutes > 0 ? "text-blue-600 font-medium" : ""}>
+                        {row.overtimeMinutes}
                       </span>
                     </TableCell>
                     <TableCell>
                       <Select
-                        value={row.status}
-                        onValueChange={(value) => updateRow(i, "status", value)}
+                        value={row.attendanceStatus}
+                        onValueChange={(value) => updateRow(i, "attendanceStatus", value)}
+                        disabled={!canEdit}
                       >
                         <SelectTrigger className="w-24">
                           <SelectValue placeholder="--" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="">--</SelectItem>
-                          <SelectItem value="Hadir">Hadir</SelectItem>
-                          <SelectItem value="Cuti">Cuti</SelectItem>
-                          <SelectItem value="Alpha">Alpha</SelectItem>
+                          <SelectItem value="hadir">Hadir</SelectItem>
+                          <SelectItem value="cuti">Cuti</SelectItem>
+                          <SelectItem value="alpha">Alpha</SelectItem>
                         </SelectContent>
                       </Select>
                     </TableCell>
                     <TableCell>
                       <Input
                         type="text"
-                        value={row.note}
-                        onChange={(e) => updateRow(i, "note", e.target.value)}
+                        value={row.notes}
+                        onChange={(e) => updateRow(i, "notes", e.target.value)}
                         className="w-40"
                         placeholder="Catatan..."
+                        disabled={!canEdit}
                         data-testid={`input-note-${i}`}
                       />
                     </TableCell>
@@ -394,18 +528,27 @@ Total: Hadir ${hadir}, Cuti ${cuti}, Alpha ${alpha}`;
       <Card>
         <CardContent className="p-6">
           <div className="flex items-center gap-3 mb-4">
-            <Button onClick={saveData} data-testid="button-save">
-              <Save className="h-4 w-4 mr-2" />
-              Simpan
-            </Button>
-            <Button 
-              variant="outline" 
-              onClick={cancelEdit}
-              data-testid="button-cancel"
-            >
-              <RotateCcw className="h-4 w-4 mr-2" />
-              Batal
-            </Button>
+            {canEdit && (
+              <>
+                <Button 
+                  onClick={saveData} 
+                  disabled={!hasChanges || saveAttendanceMutation.isPending}
+                  data-testid="button-save"
+                >
+                  <Save className="h-4 w-4 mr-2" />
+                  {saveAttendanceMutation.isPending ? "Menyimpan..." : "Simpan"}
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={cancelEdit}
+                  disabled={!hasChanges}
+                  data-testid="button-cancel"
+                >
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Batal
+                </Button>
+              </>
+            )}
             <Button 
               variant="outline" 
               onClick={exportCSV}
@@ -422,6 +565,15 @@ Total: Hadir ${hadir}, Cuti ${cuti}, Alpha ${alpha}`;
               Kembali ke List
             </Button>
           </div>
+          
+          {/* Show save prompt if there are changes */}
+          {hasChanges && canEdit && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+              <p className="text-amber-800 text-sm">
+                ⚠️ Ada perubahan yang belum disimpan. Jangan lupa untuk menyimpan data.
+              </p>
+            </div>
+          )}
           
           {/* Summary */}
           <div className="bg-muted p-4 rounded-lg">
