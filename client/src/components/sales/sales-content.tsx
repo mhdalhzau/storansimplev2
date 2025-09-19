@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { FileDown, FileSpreadsheet, TrendingUp, Upload, Loader2, Eye, Clock, Gauge, CreditCard, Calculator, Trash2 } from "lucide-react";
+import { FileDown, FileSpreadsheet, TrendingUp, Upload, Loader2, Eye, Clock, Gauge, CreditCard, Calculator, Trash2, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
@@ -28,6 +28,9 @@ function SalesDetailModal({ record }: { record: Sales }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  
+  // Get users data to show staff names
+  const { data: allUsers } = useQuery<any[]>({ queryKey: ['/api/users'] });
   
   // Delete mutation for sales record
   const deleteSalesMutation = useMutation({
@@ -111,42 +114,17 @@ function SalesDetailModal({ record }: { record: Sales }) {
         </DialogHeader>
         
         <div className="space-y-6">
-          {/* Tabel Setoran */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <CreditCard className="h-5 w-5 text-green-600" />
-                Setoran
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Cash</TableHead>
-                    <TableHead>QRIS</TableHead>
-                    <TableHead>Total</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow>
-                    <TableCell className="font-semibold text-orange-600">
-                      {formatRupiah(record.totalCash || 0)}
-                    </TableCell>
-                    <TableCell className="font-semibold text-blue-600">
-                      {formatRupiah(record.totalQris || 0)}
-                    </TableCell>
-                    <TableCell className="font-semibold text-green-700">
-                      {formatRupiah((parseFloat(record.totalCash || "0") + parseFloat(record.totalQris || "0")))}
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-
           {/* Shift Info */}
-          <div className="grid grid-cols-3 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-indigo-50 p-3 rounded-lg">
+              <div className="flex items-center gap-2 text-indigo-700 mb-1">
+                <User className="h-4 w-4" />
+                <span className="font-medium">Nama Staff</span>
+              </div>
+              <p className="text-lg font-semibold">
+                {getUserNameFromId(record.userId, allUsers)}
+              </p>
+            </div>
             <div className="bg-blue-50 p-3 rounded-lg">
               <div className="flex items-center gap-2 text-blue-700 mb-1">
                 <Clock className="h-4 w-4" />
@@ -210,6 +188,39 @@ function SalesDetailModal({ record }: { record: Sales }) {
             </CardContent>
           </Card>
 
+          {/* Tabel Setoran */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <CreditCard className="h-5 w-5 text-green-600" />
+                Setoran
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Cash</TableHead>
+                    <TableHead>QRIS</TableHead>
+                    <TableHead>Total</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow>
+                    <TableCell className="font-semibold text-orange-600">
+                      {formatRupiah(record.totalCash || 0)}
+                    </TableCell>
+                    <TableCell className="font-semibold text-blue-600">
+                      {formatRupiah(record.totalQris || 0)}
+                    </TableCell>
+                    <TableCell className="font-semibold text-green-700">
+                      {formatRupiah((parseFloat(record.totalCash || "0") + parseFloat(record.totalQris || "0")))}
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
 
           {/* Tabel PU (Pemasukan/Pengeluaran) */}
           <Card>
@@ -393,7 +404,8 @@ function MultiSalesDetailModal({ records }: { records: Sales[] }) {
                 record={record} 
                 onDelete={handleDeleteSales} 
                 canDelete={!!(user && ['manager', 'administrasi'].includes(user.role))} 
-                isDeleting={deleteSalesMutation.isPending} 
+                isDeleting={deleteSalesMutation.isPending}
+                allUsers={allUsers}
               />
             </TabsContent>
           ))}
@@ -404,11 +416,12 @@ function MultiSalesDetailModal({ records }: { records: Sales[] }) {
 }
 
 // Component to display individual staff sales data
-function StaffSalesContent({ record, onDelete, canDelete, isDeleting }: { 
+function StaffSalesContent({ record, onDelete, canDelete, isDeleting, allUsers }: { 
   record: Sales; 
   onDelete: (id: string) => void;
   canDelete: boolean;
   isDeleting: boolean;
+  allUsers?: any[];
 }) {
   // Parse JSON data if available
   const parseJsonData = (jsonString: string | null) => {
@@ -446,42 +459,17 @@ function StaffSalesContent({ record, onDelete, canDelete, isDeleting }: {
         </div>
       )}
 
-      {/* Tabel Setoran */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <CreditCard className="h-5 w-5 text-green-600" />
-            Setoran
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Cash</TableHead>
-                <TableHead>QRIS</TableHead>
-                <TableHead>Total</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow>
-                <TableCell className="font-semibold text-orange-600">
-                  {formatRupiah(record.totalCash || 0)}
-                </TableCell>
-                <TableCell className="font-semibold text-blue-600">
-                  {formatRupiah(record.totalQris || 0)}
-                </TableCell>
-                <TableCell className="font-semibold text-green-700">
-                  {formatRupiah((parseFloat(record.totalCash || "0") + parseFloat(record.totalQris || "0")))}
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
       {/* Shift Info */}
-      <div className="grid grid-cols-3 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-indigo-50 p-3 rounded-lg">
+          <div className="flex items-center gap-2 text-indigo-700 mb-1">
+            <User className="h-4 w-4" />
+            <span className="font-medium">Nama Staff</span>
+          </div>
+          <p className="text-lg font-semibold">
+            {getUserNameFromId(record.userId, allUsers)}
+          </p>
+        </div>
         <div className="bg-blue-50 p-3 rounded-lg">
           <div className="flex items-center gap-2 text-blue-700 mb-1">
             <Clock className="h-4 w-4" />
@@ -538,6 +526,40 @@ function StaffSalesContent({ record, onDelete, canDelete, isDeleting }: {
                 </TableCell>
                 <TableCell className="font-semibold text-blue-600">
                   {record.totalLiters || "0"} L
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Tabel Setoran */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <CreditCard className="h-5 w-5 text-green-600" />
+            Setoran
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Cash</TableHead>
+                <TableHead>QRIS</TableHead>
+                <TableHead>Total</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow>
+                <TableCell className="font-semibold text-orange-600">
+                  {formatRupiah(record.totalCash || 0)}
+                </TableCell>
+                <TableCell className="font-semibold text-blue-600">
+                  {formatRupiah(record.totalQris || 0)}
+                </TableCell>
+                <TableCell className="font-semibold text-green-700">
+                  {formatRupiah((parseFloat(record.totalCash || "0") + parseFloat(record.totalQris || "0")))}
                 </TableCell>
               </TableRow>
             </TableBody>
