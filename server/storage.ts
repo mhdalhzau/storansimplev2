@@ -420,7 +420,7 @@ export class MemStorage implements IStorage {
     const record: Attendance = { 
       ...insertAttendance, 
       id,
-      date: insertAttendance.date ?? null,
+      date: insertAttendance.date ?? new Date(),
       checkIn: insertAttendance.checkIn ?? null,
       checkOut: insertAttendance.checkOut ?? null,
       shift: insertAttendance.shift ?? null,
