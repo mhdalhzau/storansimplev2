@@ -375,14 +375,20 @@ export function registerRoutes(app: Express): Server {
         const setoranUrl = `http://localhost:8000/api/setoran${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
         console.log(`Calling: ${setoranUrl}`);
         
+        // Create AbortController for timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 seconds timeout
+        
         const response = await fetch(setoranUrl, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json'
           },
-          timeout: 10000 // 10 seconds timeout
+          signal: controller.signal
         });
+        
+        clearTimeout(timeoutId);
 
         if (!response.ok) {
           const errorText = await response.text();
