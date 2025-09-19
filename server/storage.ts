@@ -261,6 +261,151 @@ export class MemStorage implements IStorage {
     };
     this.users.set(endang.id, endang);
     await this.assignUserToStores(endang.id, [2]);
+
+    // Create sample sales records with complete data
+    await this.createSampleSalesRecords(putri, hafiz, endang);
+  }
+
+  private async createSampleSalesRecords(putri: User, hafiz: User, endang: User) {
+    // Sample income details (Pemasukan)
+    const sampleIncomeDetails = JSON.stringify([
+      { description: "Bonus Penjualan", amount: 25000 },
+      { description: "Komisi Target", amount: 15000 }
+    ]);
+
+    // Sample expense details (Pengeluaran)
+    const sampleExpenseDetails = JSON.stringify([
+      { description: "Pembelian Tissue", amount: 12000 },
+      { description: "Biaya Transportasi", amount: 8000 }
+    ]);
+
+    // Sample sales record for Putri (Main Store)
+    const putriSales: Sales = {
+      id: randomUUID(),
+      storeId: 1,
+      userId: putri.id,
+      date: new Date(),
+      totalSales: "850000",
+      transactions: 45,
+      averageTicket: "18888.89",
+      totalQris: "320000",
+      totalCash: "530000",
+      meterStart: "12345.678",
+      meterEnd: "12567.234",
+      totalLiters: "221.556",
+      totalIncome: "40000",
+      totalExpenses: "20000",
+      incomeDetails: sampleIncomeDetails,
+      expenseDetails: sampleExpenseDetails,
+      shift: "pagi",
+      checkIn: "06:00",
+      checkOut: "14:00",
+      submissionDate: `${new Date().toISOString().split('T')[0]}-${putri.id}-1`,
+      createdAt: new Date()
+    };
+
+    // Sample sales record for Hafiz (Main Store)
+    const hafizSales: Sales = {
+      id: randomUUID(),
+      storeId: 1,
+      userId: hafiz.id,
+      date: new Date(),
+      totalSales: "1200000",
+      transactions: 68,
+      averageTicket: "17647.06",
+      totalQris: "480000",
+      totalCash: "720000",
+      meterStart: "12567.234",
+      meterEnd: "12823.891",
+      totalLiters: "256.657",
+      totalIncome: "50000",
+      totalExpenses: "30000",
+      incomeDetails: JSON.stringify([
+        { description: "Bonus Overtime", amount: 35000 },
+        { description: "Insentif Kebersihan", amount: 15000 }
+      ]),
+      expenseDetails: JSON.stringify([
+        { description: "Beli Lap Pembersih", amount: 15000 },
+        { description: "Biaya Parkir", amount: 10000 },
+        { description: "Makan Siang", amount: 5000 }
+      ]),
+      shift: "siang",
+      checkIn: "14:00", 
+      checkOut: "22:00",
+      submissionDate: `${new Date().toISOString().split('T')[0]}-${hafiz.id}-1`,
+      createdAt: new Date()
+    };
+
+    // Sample sales record for Endang (Branch Store)
+    const endangSales: Sales = {
+      id: randomUUID(),
+      storeId: 2,
+      userId: endang.id,
+      date: new Date(),
+      totalSales: "675000",
+      transactions: 32,
+      averageTicket: "21093.75",
+      totalQris: "275000",
+      totalCash: "400000",
+      meterStart: "9876.543",
+      meterEnd: "10045.321",
+      totalLiters: "168.778",
+      totalIncome: "30000",
+      totalExpenses: "18000",
+      incomeDetails: JSON.stringify([
+        { description: "Bonus Kehadiran", amount: 20000 },
+        { description: "Tip dari Pelanggan", amount: 10000 }
+      ]),
+      expenseDetails: JSON.stringify([
+        { description: "Sabun Cuci Tangan", amount: 8000 },
+        { description: "Air Mineral", amount: 10000 }
+      ]),
+      shift: "malam",
+      checkIn: "22:00",
+      checkOut: "06:00",
+      submissionDate: `${new Date().toISOString().split('T')[0]}-${endang.id}-2`,
+      createdAt: new Date()
+    };
+
+    // Additional sales record for yesterday (Putri)
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    const putriYesterday: Sales = {
+      id: randomUUID(),
+      storeId: 1,
+      userId: putri.id,
+      date: yesterday,
+      totalSales: "920000",
+      transactions: 52,
+      averageTicket: "17692.31",
+      totalQris: "380000",
+      totalCash: "540000",
+      meterStart: "12123.456",
+      meterEnd: "12345.678",
+      totalLiters: "222.222",
+      totalIncome: "45000",
+      totalExpenses: "25000",
+      incomeDetails: JSON.stringify([
+        { description: "Bonus Target Harian", amount: 30000 },
+        { description: "Komisi Pelanggan VIP", amount: 15000 }
+      ]),
+      expenseDetails: JSON.stringify([
+        { description: "Perbaikan Kecil Alat", amount: 20000 },
+        { description: "Biaya Admin", amount: 5000 }
+      ]),
+      shift: "pagi",
+      checkIn: "06:00",
+      checkOut: "14:00",
+      submissionDate: `${yesterday.toISOString().split('T')[0]}-${putri.id}-1`,
+      createdAt: yesterday
+    };
+
+    // Save all sample sales records
+    this.salesRecords.set(putriSales.id, putriSales);
+    this.salesRecords.set(hafizSales.id, hafizSales);
+    this.salesRecords.set(endangSales.id, endangSales);
+    this.salesRecords.set(putriYesterday.id, putriYesterday);
   }
 
   // User methods
