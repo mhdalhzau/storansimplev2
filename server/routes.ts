@@ -807,6 +807,12 @@ export function registerRoutes(app: Express): Server {
             }
           }
           
+          // Ensure storeId is available before creating attendance
+          if (!targetStoreId) {
+            // If user doesn't have a store, assign to default store (ID: 1)
+            targetStoreId = 1;
+          }
+          
           const attendanceData = insertAttendanceSchema.parse({
             userId: targetUserId,
             storeId: targetStoreId,
@@ -826,7 +832,12 @@ export function registerRoutes(app: Express): Server {
       // 2. Create sales record for all setoran submissions
       {
         try {
-          const salesStoreId = await getUserFirstStoreId(req.user);
+          let salesStoreId = await getUserFirstStoreId(req.user);
+          
+          // Ensure storeId is available before creating sales
+          if (!salesStoreId) {
+            salesStoreId = 1; // Default store
+          }
           
           const salesData = insertSalesSchema.parse({
             storeId: salesStoreId,
@@ -849,7 +860,12 @@ export function registerRoutes(app: Express): Server {
           if (expenses?.length > 0) {
             for (const expense of expenses) {
               if (expense.description && expense.amount > 0) {
-                const cashflowStoreId = await getUserFirstStoreId(req.user);
+                let cashflowStoreId = await getUserFirstStoreId(req.user);
+                
+                // Ensure storeId is available before creating cashflow
+                if (!cashflowStoreId) {
+                  cashflowStoreId = 1; // Default store
+                }
                 
                 const expenseData = insertCashflowSchema.parse({
                   storeId: cashflowStoreId,
@@ -867,7 +883,12 @@ export function registerRoutes(app: Express): Server {
           if (income?.length > 0) {
             for (const incomeItem of income) {
               if (incomeItem.description && incomeItem.amount > 0) {
-                const cashflowStoreId = await getUserFirstStoreId(req.user);
+                let cashflowStoreId = await getUserFirstStoreId(req.user);
+                
+                // Ensure storeId is available before creating cashflow
+                if (!cashflowStoreId) {
+                  cashflowStoreId = 1; // Default store
+                }
                 
                 const incomeData = insertCashflowSchema.parse({
                   storeId: cashflowStoreId,
