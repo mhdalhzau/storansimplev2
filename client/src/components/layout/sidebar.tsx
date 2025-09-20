@@ -11,6 +11,7 @@ import {
   Users,
   Store,
   UserCheck,
+  Settings,
   LogOut 
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -71,15 +72,9 @@ const menuItems: MenuItem[] = [
     allowedRoles: ["manager", "administrasi"],
   },
   {
-    id: "user-management",
-    label: "User Management",
-    icon: <Users className="w-5 h-5" />,
-    allowedRoles: ["manager"],
-  },
-  {
-    id: "store-management",
-    label: "Store Management",
-    icon: <Store className="w-5 h-5" />,
+    id: "settings",
+    label: "Settings",
+    icon: <Settings className="w-5 h-5" />,
     allowedRoles: ["manager"],
   },
 ];
