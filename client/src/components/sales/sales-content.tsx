@@ -438,63 +438,67 @@ function StaffSalesContent({ record, onDelete, canDelete, isDeleting, allUsers }
 
   return (
     <div className="space-y-6">
-      {/* Staff Actions */}
-      {canDelete && (
-        <div className="flex justify-end">
+      {/* Staff Header with Actions */}
+      <div className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-blue-100 rounded-full">
+            <User className="h-5 w-5 text-blue-600" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">
+              {getUserNameFromId(record.userId, allUsers)}
+            </h3>
+            <p className="text-sm text-gray-600">
+              Shift {record.shift || "—"} • {record.checkIn || "—"} - {record.checkOut || "—"}
+            </p>
+          </div>
+        </div>
+        {canDelete && (
           <Button
             variant="destructive"
             size="sm"
             onClick={() => onDelete(record.id)}
             disabled={isDeleting}
-            className="text-red-600 border-red-200 hover:bg-red-50"
+            className="bg-red-50 text-red-600 border-red-200 hover:bg-red-100 hover:text-red-700 transition-colors"
             data-testid={`button-delete-${record.id}`}
           >
             {isDeleting ? (
-              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             ) : (
-              <Trash2 className="h-4 w-4 mr-1" />
+              <Trash2 className="h-4 w-4 mr-2" />
             )}
-            {isDeleting ? "Menghapus..." : "Hapus"}
+            {isDeleting ? "Menghapus..." : "Hapus Data"}
           </Button>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* Shift Info */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-indigo-50 p-3 rounded-lg">
-          <div className="flex items-center gap-2 text-indigo-700 mb-1">
-            <User className="h-4 w-4" />
-            <span className="font-medium">Nama Staff</span>
+      {/* Sales Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+          <div className="flex items-center gap-2 text-green-700 mb-2">
+            <TrendingUp className="h-5 w-5" />
+            <span className="font-medium">Total Penjualan</span>
           </div>
-          <p className="text-lg font-semibold">
-            {getUserNameFromId(record.userId, allUsers)}
+          <p className="text-2xl font-bold text-green-800">
+            {formatRupiah(record.totalSales)}
           </p>
         </div>
-        <div className="bg-blue-50 p-3 rounded-lg">
-          <div className="flex items-center gap-2 text-blue-700 mb-1">
-            <Clock className="h-4 w-4" />
-            <span className="font-medium">Shift</span>
+        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+          <div className="flex items-center gap-2 text-blue-700 mb-2">
+            <CreditCard className="h-5 w-5" />
+            <span className="font-medium">Total Transaksi</span>
           </div>
-          <p className="text-lg font-semibold capitalize">
-            {record.shift || "—"}
+          <p className="text-2xl font-bold text-blue-800">
+            {record.transactions || 0}
           </p>
         </div>
-        <div className="bg-green-50 p-3 rounded-lg">
-          <div className="flex items-center gap-2 text-green-700 mb-1">
-            <Clock className="h-4 w-4" />
-            <span className="font-medium">Jam Masuk</span>
+        <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+          <div className="flex items-center gap-2 text-purple-700 mb-2">
+            <Calculator className="h-5 w-5" />
+            <span className="font-medium">Rata-rata</span>
           </div>
-          <p className="text-lg font-semibold">
-            {record.checkIn || "—"}
-          </p>
-        </div>
-        <div className="bg-orange-50 p-3 rounded-lg">
-          <div className="flex items-center gap-2 text-orange-700 mb-1">
-            <Clock className="h-4 w-4" />
-            <span className="font-medium">Jam Keluar</span>
-          </div>
-          <p className="text-lg font-semibold">
-            {record.checkOut || "—"}
+          <p className="text-2xl font-bold text-purple-800">
+            {formatRupiah(record.averageTicket || 0)}
           </p>
         </div>
       </div>
