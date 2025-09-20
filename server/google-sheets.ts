@@ -10,6 +10,7 @@ export interface GoogleSheetsConfig {
 export class GoogleSheetsService {
   private sheets: any;
   private config: GoogleSheetsConfig;
+  private sheetId: number | null = null;
 
   constructor(config: GoogleSheetsConfig) {
     this.config = config;
@@ -26,9 +27,35 @@ export class GoogleSheetsService {
       });
 
       this.sheets = google.sheets({ version: 'v4', auth });
+      
+      // Resolve and cache the sheetId for the worksheet
+      await this.resolveSheetId();
     } catch (error) {
       console.error('Failed to initialize Google Sheets:', error);
       throw new Error('Google Sheets initialization failed');
+    }
+  }
+
+  private async resolveSheetId(): Promise<void> {
+    try {
+      const response = await this.sheets.spreadsheets.get({
+        spreadsheetId: this.config.spreadsheetId,
+      });
+
+      const sheet = response.data.sheets?.find((s: any) => 
+        s.properties?.title === this.config.worksheetName
+      );
+
+      if (sheet) {
+        this.sheetId = sheet.properties.sheetId;
+        console.log(`Found worksheet "${this.config.worksheetName}" with ID: ${this.sheetId}`);
+      } else {
+        console.warn(`Worksheet "${this.config.worksheetName}" not found, using sheetId: 0`);
+        this.sheetId = 0;
+      }
+    } catch (error) {
+      console.error('Failed to resolve sheet ID:', error);
+      this.sheetId = 0; // Fallback to first sheet
     }
   }
 
@@ -130,29 +157,35 @@ export class GoogleSheetsService {
     }
   }
 
-  async updateSalesData(sales: SelectSales, rowIndex: number): Promise<void> {
+  async updateSalesData(sales: SelectSales): Promise<void> {
     try {
-      const values = [this.formatSalesDataForSheets(sales)];
+      const rowIndex = await this.findRowIndexBySalesId(sales.id || '');
       
-      await this.sheets.spreadsheets.values.update({
-        spreadsheetId: this.config.spreadsheetId,
-        range: `${this.config.worksheetName}!A${rowIndex}:U${rowIndex}`,
-        valueInputOption: 'RAW',
-        resource: {
-          values,
-        },
-      });
-      
-      console.log(`Sales data updated in Google Sheets: ${sales.id} at row ${rowIndex}`);
+      if (rowIndex !== null) {
+        const values = [this.formatSalesDataForSheets(sales)];
+        
+        await this.sheets.spreadsheets.values.update({
+          spreadsheetId: this.config.spreadsheetId,
+          range: `${this.config.worksheetName}!A${rowIndex + 1}:U${rowIndex + 1}`, // +1 because sheet rows are 1-indexed
+          valueInputOption: 'RAW',
+          resource: {
+            values,
+          },
+        });
+        
+        console.log(`Sales data updated in Google Sheets: ${sales.id} at row ${rowIndex + 1}`);
+      } else {
+        console.warn(`Sales ID ${sales.id} not found for update, appending new row instead`);
+        await this.appendSalesData(sales);
+      }
     } catch (error) {
       console.error('Failed to update sales data in Google Sheets:', error);
       throw error;
     }
   }
 
-  async deleteSalesData(salesId: string): Promise<void> {
+  async findRowIndexBySalesId(salesId: string): Promise<number | null> {
     try {
-      // Find the row with this sales ID
       const response = await this.sheets.spreadsheets.values.get({
         spreadsheetId: this.config.spreadsheetId,
         range: `${this.config.worksheetName}!A:A`,
@@ -160,26 +193,39 @@ export class GoogleSheetsService {
 
       if (response.data.values) {
         const rowIndex = response.data.values.findIndex((row: string[]) => row[0] === salesId);
-        
-        if (rowIndex > 0) { // Skip header row (index 0)
-          await this.sheets.spreadsheets.batchUpdate({
-            spreadsheetId: this.config.spreadsheetId,
-            resource: {
-              requests: [{
-                deleteDimension: {
-                  range: {
-                    sheetId: 0, // Assuming first sheet
-                    dimension: 'ROWS',
-                    startIndex: rowIndex,
-                    endIndex: rowIndex + 1,
-                  },
+        return rowIndex > 0 ? rowIndex : null; // Skip header row (index 0)
+      }
+      return null;
+    } catch (error) {
+      console.error('Failed to find row index by sales ID:', error);
+      return null;
+    }
+  }
+
+  async deleteSalesData(salesId: string): Promise<void> {
+    try {
+      const rowIndex = await this.findRowIndexBySalesId(salesId);
+      
+      if (rowIndex !== null) {
+        await this.sheets.spreadsheets.batchUpdate({
+          spreadsheetId: this.config.spreadsheetId,
+          resource: {
+            requests: [{
+              deleteDimension: {
+                range: {
+                  sheetId: this.sheetId || 0,
+                  dimension: 'ROWS',
+                  startIndex: rowIndex,
+                  endIndex: rowIndex + 1,
                 },
-              }],
-            },
-          });
-          
-          console.log(`Sales data deleted from Google Sheets: ${salesId}`);
-        }
+              },
+            }],
+          },
+        });
+        
+        console.log(`Sales data deleted from Google Sheets: ${salesId}`);
+      } else {
+        console.warn(`Sales ID ${salesId} not found in Google Sheets for deletion`);
       }
     } catch (error) {
       console.error('Failed to delete sales data from Google Sheets:', error);

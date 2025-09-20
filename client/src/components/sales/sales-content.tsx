@@ -668,6 +668,7 @@ function StaffSalesContent({ record, onDelete, canDelete, isDeleting, allUsers }
 export default function SalesContent() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [selectedStore, setSelectedStore] = useState("all");
@@ -788,11 +789,17 @@ export default function SalesContent() {
     return localStorage.getItem('lastSyncTime') || null;
   });
 
+  // Query for Google Sheets status
+  const { data: sheetsStatus } = useQuery({
+    queryKey: ['/api/sales/sheets-status'],
+    enabled: ['manager', 'administrasi'].includes(user?.role || ''),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+
   // Mutation for syncing to Google Sheets
   const syncToSheetsMutation = useMutation({
-    mutationFn: async (data: { salesData: Sales[]; config: any }) => {
-      const res = await apiRequest("POST", "/api/sync/sheets", data);
-      return await res.json();
+    mutationFn: async (data: { storeId?: string; startDate?: string; endDate?: string }) => {
+      return await apiRequest("POST", "/api/sales/sync-to-sheets", data);
     },
     onSuccess: () => {
       const now = new Date().toLocaleString('id-ID');
@@ -827,24 +834,10 @@ export default function SalesContent() {
 
     setIsSyncing(true);
     
-    // Prepare data for Google Sheets
-    const syncConfig = {
-      spreadsheetId: localStorage.getItem('spreadsheetId') || '',
-      sheetName: 'Sales Data',
-      dateRange: { startDate, endDate },
-      storeFilter: selectedStore
-    };
-
-    // If no spreadsheet ID, create CSV export instead
-    if (!syncConfig.spreadsheetId) {
-      handleExportCSV();
-      setIsSyncing(false);
-      return;
-    }
-
     syncToSheetsMutation.mutate({
-      salesData: salesRecords,
-      config: syncConfig
+      storeId: selectedStore !== "all" ? selectedStore : undefined,
+      startDate,
+      endDate
     });
   };
 

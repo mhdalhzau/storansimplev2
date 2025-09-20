@@ -3,6 +3,12 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { 
+  initializeGoogleSheetsService, 
+  getGoogleSheetsService, 
+  isGoogleSheetsConfigured,
+  type GoogleSheetsConfig 
+} from "./google-sheets";
+import { 
   insertAttendanceSchema,
   insertCashflowSchema,
   insertProposalSchema,
@@ -42,6 +48,31 @@ async function getAccessibleStoreIds(user: any): Promise<number[]> {
 }
 
 export function registerRoutes(app: Express): Server {
+  // Initialize Google Sheets Service if credentials are available
+  const initializeGoogleSheets = () => {
+    try {
+      const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
+      const credentials = process.env.GOOGLE_SHEETS_CREDENTIALS;
+      
+      if (spreadsheetId && credentials) {
+        const config: GoogleSheetsConfig = {
+          spreadsheetId,
+          worksheetName: 'Sales Data',
+          credentialsJson: credentials
+        };
+        
+        initializeGoogleSheetsService(config);
+        console.log('Google Sheets service initialized successfully');
+      } else {
+        console.log('Google Sheets credentials not found, sync functionality disabled');
+      }
+    } catch (error) {
+      console.error('Failed to initialize Google Sheets service:', error);
+    }
+  };
+  
+  initializeGoogleSheets();
+
   // Setup authentication routes
   setupAuth(app);
 
@@ -465,6 +496,18 @@ export function registerRoutes(app: Express): Server {
             // Save to sales database
             const savedSales = await storage.createSales(validatedSalesData);
             
+            // Real-time sync to Google Sheets if configured
+            const sheetsService = getGoogleSheetsService();
+            if (sheetsService) {
+              try {
+                await sheetsService.appendSalesData(savedSales);
+                console.log(`Synced sales data to Google Sheets: ${savedSales.id}`);
+              } catch (sheetsError) {
+                console.error(`Failed to sync sales data to Google Sheets for ${savedSales.id}:`, sheetsError);
+                // Don't fail the main operation if sheets sync fails
+              }
+            }
+            
             importResults.success++;
             importResults.details.push({
               index: i,
@@ -749,9 +792,113 @@ export function registerRoutes(app: Express): Server {
       }
       
       await storage.deleteSales(req.params.id);
+      
+      // Sync deletion to Google Sheets if configured
+      const sheetsService = getGoogleSheetsService();
+      if (sheetsService) {
+        try {
+          await sheetsService.deleteSalesData(req.params.id);
+        } catch (error) {
+          console.error('Failed to delete from Google Sheets:', error);
+          // Don't fail the main operation if sheets sync fails
+        }
+      }
+      
       res.status(204).send();
     } catch (error: any) {
       res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Google Sheets Sync endpoints
+  app.post("/api/sales/sync-to-sheets", async (req, res) => {
+    try {
+      if (!req.user || !['manager', 'administrasi'].includes(req.user.role)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const sheetsService = getGoogleSheetsService();
+      if (!sheetsService) {
+        return res.status(400).json({ 
+          message: "Google Sheets not configured",
+          details: "Please configure GOOGLE_SHEETS_CREDENTIALS and GOOGLE_SHEETS_SPREADSHEET_ID environment variables"
+        });
+      }
+
+      // Validate request body
+      const requestSchema = z.object({
+        storeId: z.string().optional(),
+        startDate: z.string().optional(),
+        endDate: z.string().optional()
+      });
+
+      const validatedBody = requestSchema.parse(req.body);
+      const { storeId, startDate, endDate } = validatedBody;
+      
+      // Get target store ID
+      const targetStoreId = storeId ? parseInt(storeId) : await getUserFirstStoreId(req.user);
+      
+      if (!targetStoreId) {
+        return res.status(400).json({ message: "Store ID is required" });
+      }
+
+      // Verify store access (important for managers)
+      if (!(await hasStoreAccess(req.user, targetStoreId))) {
+        return res.status(403).json({ message: "You don't have access to this store" });
+      }
+
+      // Get sales data for the specified store and date range
+      const salesData = await storage.getSalesByStore(targetStoreId, startDate, endDate);
+      
+      // Sync all data to Google Sheets
+      await sheetsService.syncAllSalesData(salesData);
+      
+      res.json({
+        success: true,
+        message: `Successfully synced ${salesData.length} sales records to Google Sheets`,
+        syncedRecords: salesData.length
+      });
+
+    } catch (error: any) {
+      console.error('Google Sheets sync error:', error);
+      res.status(500).json({ 
+        message: "Failed to sync to Google Sheets",
+        details: error.message 
+      });
+    }
+  });
+
+  app.get("/api/sales/sheets-status", async (req, res) => {
+    try {
+      if (!req.user || !['manager', 'administrasi'].includes(req.user.role)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const sheetsService = getGoogleSheetsService();
+      
+      if (!sheetsService) {
+        return res.json({
+          configured: false,
+          message: "Google Sheets integration not configured"
+        });
+      }
+
+      const isConnected = await sheetsService.testConnection();
+      
+      res.json({
+        configured: true,
+        connected: isConnected,
+        spreadsheetId: process.env.GOOGLE_SHEETS_SPREADSHEET_ID,
+        message: isConnected ? "Google Sheets connected successfully" : "Failed to connect to Google Sheets"
+      });
+
+    } catch (error: any) {
+      res.status(500).json({
+        configured: true,
+        connected: false,
+        message: "Error testing Google Sheets connection",
+        details: error.message
+      });
     }
   });
 
