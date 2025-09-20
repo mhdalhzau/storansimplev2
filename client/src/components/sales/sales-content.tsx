@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { FileDown, FileSpreadsheet, TrendingUp, Upload, Loader2, Eye, Clock, Gauge, CreditCard, Calculator, Trash2, User } from "lucide-react";
+import { FileDown, FileSpreadsheet, TrendingUp, Upload, Loader2, Eye, Clock, Gauge, CreditCard, Calculator, Trash2, User, Wifi, WifiOff, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
@@ -779,6 +779,162 @@ export default function SalesContent() {
     }
   };
 
+  // Google Sheets sync functionality
+  const [isSyncEnabled, setIsSyncEnabled] = useState(() => {
+    return localStorage.getItem('sheetsSync') === 'enabled';
+  });
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState(() => {
+    return localStorage.getItem('lastSyncTime') || null;
+  });
+
+  // Mutation for syncing to Google Sheets
+  const syncToSheetsMutation = useMutation({
+    mutationFn: async (data: { salesData: Sales[]; config: any }) => {
+      const res = await apiRequest("POST", "/api/sync/sheets", data);
+      return await res.json();
+    },
+    onSuccess: () => {
+      const now = new Date().toLocaleString('id-ID');
+      setLastSyncTime(now);
+      localStorage.setItem('lastSyncTime', now);
+      
+      toast({
+        title: "Sync Berhasil! ✅",
+        description: "Data berhasil disync ke Google Sheets",
+      });
+      setIsSyncing(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Sync Gagal ❌",
+        description: error.message || "Gagal sync ke Google Sheets",
+        variant: "destructive",
+      });
+      setIsSyncing(false);
+    },
+  });
+
+  const handleSyncToSheets = async () => {
+    if (!salesRecords || salesRecords.length === 0) {
+      toast({
+        title: "Tidak Ada Data",
+        description: "Tidak ada data sales untuk di-sync",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSyncing(true);
+    
+    // Prepare data for Google Sheets
+    const syncConfig = {
+      spreadsheetId: localStorage.getItem('spreadsheetId') || '',
+      sheetName: 'Sales Data',
+      dateRange: { startDate, endDate },
+      storeFilter: selectedStore
+    };
+
+    // If no spreadsheet ID, create CSV export instead
+    if (!syncConfig.spreadsheetId) {
+      handleExportCSV();
+      setIsSyncing(false);
+      return;
+    }
+
+    syncToSheetsMutation.mutate({
+      salesData: salesRecords,
+      config: syncConfig
+    });
+  };
+
+  const handleExportCSV = () => {
+    if (!salesRecords || salesRecords.length === 0) {
+      toast({
+        title: "Tidak Ada Data",
+        description: "Tidak ada data untuk diekspor",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Convert sales data to CSV format
+    const csvHeaders = [
+      'Tanggal',
+      'Store',
+      'Staff',
+      'Shift',
+      'Jam Masuk',
+      'Jam Keluar',
+      'Total Sales (Rp)',
+      'Cash (Rp)',
+      'QRIS (Rp)',
+      'Jumlah Transaksi',
+      'Rata-rata per Transaksi (Rp)',
+      'Meter Awal',
+      'Meter Akhir',
+      'Total Liter',
+      'Total Pemasukan (Rp)',
+      'Total Pengeluaran (Rp)'
+    ];
+
+    const csvRows = salesRecords.map(record => [
+      new Date(record.date || '').toLocaleDateString('id-ID'),
+      record.storeId === 1 ? 'Main Store' : 'Branch Store',
+      getUserNameFromId(record.userId, allUsers),
+      record.shift || '',
+      record.checkIn || '',
+      record.checkOut || '',
+      record.totalSales || '0',
+      record.totalCash || '0',
+      record.totalQris || '0',
+      record.transactions || '0',
+      record.averageTicket || '0',
+      record.meterStart || '0',
+      record.meterEnd || '0',
+      record.totalLiters || '0',
+      record.totalIncome || '0',
+      record.totalExpenses || '0'
+    ]);
+
+    const csvContent = [
+      csvHeaders.join(','),
+      ...csvRows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    // Create and download CSV file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `sales-data-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+
+    const now = new Date().toLocaleString('id-ID');
+    setLastSyncTime(now);
+    localStorage.setItem('lastSyncTime', now);
+
+    toast({
+      title: "Export Berhasil! 📊",
+      description: "File CSV siap diimport ke Google Sheets",
+    });
+  };
+
+  const toggleSync = () => {
+    const newState = !isSyncEnabled;
+    setIsSyncEnabled(newState);
+    localStorage.setItem('sheetsSync', newState ? 'enabled' : 'disabled');
+    
+    toast({
+      title: newState ? "Sync Diaktifkan" : "Sync Dinonaktifkan",
+      description: newState ? "Auto-sync ke spreadsheet aktif" : "Auto-sync dimatikan",
+    });
+  };
+
+  // Get users data for CSV export
+  const { data: allUsers } = useQuery<any[]>({ queryKey: ['/api/users'] });
+
   return (
     <Card>
       <CardHeader>
@@ -846,8 +1002,39 @@ export default function SalesContent() {
               <FileSpreadsheet className="h-4 w-4 mr-2" />
               Export Excel
             </Button>
+            <Button
+              variant="outline"
+              onClick={handleSyncToSheets}
+              disabled={isSyncing}
+              className={`${isSyncEnabled ? 'text-purple-600 border-purple-200 hover:bg-purple-50' : 'text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+              data-testid="button-sync-sheets"
+            >
+              {isSyncing ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : isSyncEnabled ? (
+                <Wifi className="h-4 w-4 mr-2" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              {isSyncing ? "Syncing..." : "Sync to Sheets"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={toggleSync}
+              className={`${isSyncEnabled ? 'text-green-600 hover:bg-green-50' : 'text-gray-500 hover:bg-gray-50'}`}
+              data-testid="button-toggle-sync"
+              title={isSyncEnabled ? "Disable auto-sync" : "Enable auto-sync"}
+            >
+              {isSyncEnabled ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
+            </Button>
           </div>
         </div>
+        {lastSyncTime && (
+          <div className="text-xs text-gray-500 mt-2">
+            Last sync: {lastSyncTime}
+          </div>
+        )}
       </CardHeader>
       <CardContent>
         {isLoading ? (

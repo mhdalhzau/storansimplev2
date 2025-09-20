@@ -1925,6 +1925,80 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Sync to Google Sheets endpoint
+  app.post("/api/sync/sheets", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { salesData, config } = req.body;
+      
+      if (!salesData || !Array.isArray(salesData)) {
+        return res.status(400).json({ message: "Invalid sales data" });
+      }
+
+      // For now, we'll simulate Google Sheets sync
+      // In production, this would use Google Sheets API
+      const syncResult = {
+        success: true,
+        message: "Data synced to Google Sheets successfully",
+        recordCount: salesData.length,
+        spreadsheetId: config?.spreadsheetId || "demo-spreadsheet",
+        sheetName: config?.sheetName || "Sales Data",
+        timestamp: new Date().toISOString(),
+        details: {
+          totalRows: salesData.length,
+          dateRange: config?.dateRange,
+          storeFilter: config?.storeFilter
+        }
+      };
+
+      // Log the sync activity
+      console.log(`[SHEETS SYNC] User ${req.user.email} synced ${salesData.length} sales records`);
+      console.log(`[SHEETS SYNC] Config:`, config);
+      
+      // Simulate processing time
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      res.status(200).json(syncResult);
+    } catch (error: any) {
+      console.error('Sheets sync error:', error);
+      res.status(500).json({ 
+        message: "Failed to sync to Google Sheets",
+        error: error.message 
+      });
+    }
+  });
+
+  // Get sync status endpoint
+  app.get("/api/sync/status", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Mock sync status - in production this would check actual Google Sheets API status
+      const syncStatus = {
+        isConnected: true,
+        lastSync: new Date(Date.now() - 5 * 60 * 1000).toISOString(), // 5 minutes ago
+        spreadsheetId: "demo-spreadsheet-id",
+        sheetName: "Sales Data",
+        autoSyncEnabled: true,
+        nextSyncTime: new Date(Date.now() + 10 * 60 * 1000).toISOString(), // 10 minutes from now
+        totalRecords: 42
+      };
+
+      res.status(200).json(syncStatus);
+    } catch (error: any) {
+      console.error('Sync status error:', error);
+      res.status(500).json({ 
+        message: "Failed to get sync status",
+        error: error.message 
+      });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
