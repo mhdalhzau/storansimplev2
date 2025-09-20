@@ -2146,6 +2146,347 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Google Sheets Configuration API endpoints
+  let googleSheetsConfig: any = null; // In-memory storage for config
+
+  // Get Google Sheets configuration
+  app.get("/api/google-sheets/config", async (req, res) => {
+    try {
+      if (!req.user || req.user.role !== 'manager') {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const sheetsService = getGoogleSheetsService();
+      const config = {
+        id: "default",
+        spreadsheetId: process.env.GOOGLE_SHEETS_SPREADSHEET_ID || googleSheetsConfig?.spreadsheetId || "",
+        worksheetName: googleSheetsConfig?.worksheetName || "Sales Data",
+        syncEnabled: googleSheetsConfig?.syncEnabled || !!process.env.GOOGLE_SHEETS_CREDENTIALS,
+        autoSync: googleSheetsConfig?.autoSync || false,
+        lastSyncAt: googleSheetsConfig?.lastSyncAt,
+        status: sheetsService ? "connected" : "disconnected" as "connected" | "disconnected" | "error",
+        errorMessage: googleSheetsConfig?.errorMessage
+      };
+
+      res.json(config);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Save Google Sheets configuration
+  app.post("/api/google-sheets/config", async (req, res) => {
+    try {
+      if (!req.user || req.user.role !== 'manager') {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const { spreadsheetId, worksheetName, syncEnabled, autoSync, credentials } = req.body;
+
+      if (!spreadsheetId || !worksheetName) {
+        return res.status(400).json({ message: "Spreadsheet ID and worksheet name are required" });
+      }
+
+      if (syncEnabled && !credentials && !process.env.GOOGLE_SHEETS_CREDENTIALS) {
+        return res.status(400).json({ message: "Credentials are required when sync is enabled" });
+      }
+
+      // Update in-memory config
+      googleSheetsConfig = {
+        spreadsheetId,
+        worksheetName,
+        syncEnabled,
+        autoSync,
+        lastSyncAt: googleSheetsConfig?.lastSyncAt,
+        errorMessage: null
+      };
+
+      // Initialize Google Sheets service if credentials provided
+      if (syncEnabled && credentials) {
+        try {
+          const config: GoogleSheetsConfig = {
+            spreadsheetId,
+            worksheetName,
+            credentialsJson: credentials
+          };
+          
+          initializeGoogleSheetsService(config);
+          console.log('Google Sheets service re-initialized with new configuration');
+        } catch (error: any) {
+          googleSheetsConfig.errorMessage = error.message;
+          console.error('Failed to initialize Google Sheets service:', error);
+        }
+      }
+
+      res.json({ 
+        message: "Configuration saved successfully",
+        config: {
+          ...googleSheetsConfig,
+          // Don't return credentials in response
+          status: getGoogleSheetsService() ? "connected" : "disconnected"
+        }
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Test Google Sheets connection
+  app.post("/api/google-sheets/test-connection", async (req, res) => {
+    try {
+      if (!req.user || req.user.role !== 'manager') {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const sheetsService = getGoogleSheetsService();
+      if (!sheetsService) {
+        return res.status(400).json({ 
+          message: "Google Sheets not configured",
+          details: "Please configure Google Sheets credentials first" 
+        });
+      }
+
+      // Test connection
+      const isConnected = await sheetsService.testConnection();
+      if (!isConnected) {
+        return res.status(400).json({ 
+          message: "Connection test failed",
+          details: "Unable to connect to Google Sheets with current configuration" 
+        });
+      }
+
+      // Get worksheet information
+      let worksheets = [];
+      try {
+        worksheets = await sheetsService.listWorksheets();
+      } catch (error) {
+        console.warn('Could not fetch worksheet details:', error);
+        // Fallback to default worksheet info
+        worksheets = [{
+          name: googleSheetsConfig?.worksheetName || "Sales Data",
+          id: 0,
+          rowCount: 100,
+          columnCount: 21
+        }];
+      }
+
+      res.json({ 
+        message: "Connection successful",
+        connected: true,
+        worksheets
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Manual sync to Google Sheets
+  app.post("/api/google-sheets/sync", async (req, res) => {
+    try {
+      if (!req.user || req.user.role !== 'manager') {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const sheetsService = getGoogleSheetsService();
+      if (!sheetsService) {
+        return res.status(400).json({ 
+          message: "Google Sheets not configured",
+          details: "Please configure Google Sheets credentials first" 
+        });
+      }
+
+      // Get all sales data for sync
+      const allStores = await storage.getAllStores();
+      let allSalesData: any[] = [];
+      
+      for (const store of allStores) {
+        const storeSales = await storage.getSalesByStore(store.id);
+        allSalesData = allSalesData.concat(storeSales);
+      }
+
+      // Sync all sales data
+      await sheetsService.syncAllSalesData(allSalesData);
+
+      // Update last sync time
+      if (googleSheetsConfig) {
+        googleSheetsConfig.lastSyncAt = new Date().toISOString();
+      }
+
+      res.json({ 
+        message: "Sync completed successfully",
+        recordCount: allSalesData.length,
+        syncedAt: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('Google Sheets sync error:', error);
+      res.status(500).json({ 
+        message: "Sync failed",
+        details: error.message 
+      });
+    }
+  });
+
+  // Create new worksheet
+  app.post("/api/google-sheets/create-worksheet", async (req, res) => {
+    try {
+      if (!req.user || req.user.role !== 'manager') {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const { worksheetName } = req.body;
+      if (!worksheetName) {
+        return res.status(400).json({ message: "Worksheet name is required" });
+      }
+
+      const sheetsService = getGoogleSheetsService();
+      if (!sheetsService) {
+        return res.status(400).json({ 
+          message: "Google Sheets not configured",
+          details: "Please configure Google Sheets credentials first" 
+        });
+      }
+
+      // Create the worksheet using the service
+      const result = await sheetsService.createWorksheet(worksheetName);
+
+      res.json({ 
+        message: "Worksheet created successfully",
+        worksheetName: result.name,
+        worksheetId: result.worksheetId
+      });
+    } catch (error: any) {
+      console.error('Create worksheet error:', error);
+      res.status(500).json({ 
+        message: "Failed to create worksheet",
+        details: error.message 
+      });
+    }
+  });
+
+  // List worksheets endpoint
+  app.get("/api/google-sheets/worksheets", async (req, res) => {
+    try {
+      if (!req.user || req.user.role !== 'manager') {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const sheetsService = getGoogleSheetsService();
+      if (!sheetsService) {
+        return res.status(400).json({ 
+          message: "Google Sheets not configured",
+          details: "Please configure Google Sheets credentials first" 
+        });
+      }
+
+      const worksheets = await sheetsService.listWorksheets();
+      res.json({ worksheets });
+    } catch (error: any) {
+      console.error('List worksheets error:', error);
+      res.status(500).json({ 
+        message: "Failed to list worksheets",
+        details: error.message 
+      });
+    }
+  });
+
+  // Delete worksheet endpoint  
+  app.delete("/api/google-sheets/worksheet/:name", async (req, res) => {
+    try {
+      if (!req.user || req.user.role !== 'manager') {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const { name } = req.params;
+      if (!name) {
+        return res.status(400).json({ message: "Worksheet name is required" });
+      }
+
+      const sheetsService = getGoogleSheetsService();
+      if (!sheetsService) {
+        return res.status(400).json({ 
+          message: "Google Sheets not configured",
+          details: "Please configure Google Sheets credentials first" 
+        });
+      }
+
+      await sheetsService.deleteWorksheet(decodeURIComponent(name));
+
+      res.json({ 
+        message: "Worksheet deleted successfully",
+        worksheetName: name
+      });
+    } catch (error: any) {
+      console.error('Delete worksheet error:', error);
+      res.status(500).json({ 
+        message: "Failed to delete worksheet",
+        details: error.message 
+      });
+    }
+  });
+
+  // Sync to specific worksheet endpoint
+  app.post("/api/google-sheets/sync-to-worksheet", async (req, res) => {
+    try {
+      if (!req.user || req.user.role !== 'manager') {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const { worksheetName, storeIds } = req.body;
+      if (!worksheetName) {
+        return res.status(400).json({ message: "Worksheet name is required" });
+      }
+
+      const sheetsService = getGoogleSheetsService();
+      if (!sheetsService) {
+        return res.status(400).json({ 
+          message: "Google Sheets not configured",
+          details: "Please configure Google Sheets credentials first" 
+        });
+      }
+
+      // Get sales data for specific stores or all stores
+      let allSalesData: any[] = [];
+      if (storeIds && Array.isArray(storeIds) && storeIds.length > 0) {
+        // Sync specific stores
+        for (const storeId of storeIds) {
+          const storeSales = await storage.getSalesByStore(storeId);
+          allSalesData = allSalesData.concat(storeSales);
+        }
+      } else {
+        // Sync all stores
+        const allStores = await storage.getAllStores();
+        for (const store of allStores) {
+          const storeSales = await storage.getSalesByStore(store.id);
+          allSalesData = allSalesData.concat(storeSales);
+        }
+      }
+
+      // Sync to the specific worksheet
+      const result = await sheetsService.syncToWorksheet(worksheetName, allSalesData);
+
+      if (result.success) {
+        res.json({ 
+          message: "Sync completed successfully",
+          worksheetName,
+          recordCount: result.recordCount,
+          syncedAt: new Date().toISOString()
+        });
+      } else {
+        res.status(500).json({ 
+          message: "Sync failed",
+          details: result.errorMessage,
+          worksheetName
+        });
+      }
+    } catch (error: any) {
+      console.error('Sync to worksheet error:', error);
+      res.status(500).json({ 
+        message: "Sync failed",
+        details: error.message 
+      });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
