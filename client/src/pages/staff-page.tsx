@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { formatRupiah } from "@/lib/utils";
 import { detectShift, calculateLateness, calculateOvertime } from "@shared/attendance-utils";
 
 interface ExpenseItem {
@@ -359,15 +360,6 @@ export default function StaffPage() {
     ));
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-      currencyDisplay: 'symbol'
-    }).format(amount);
-  };
 
   const formatNumber = (amount: number) => {
     return new Intl.NumberFormat('id-ID').format(amount);
@@ -495,17 +487,17 @@ Nomor Akhir: ${nomorAkhir}
 Total Liter: ${totalLiter.toFixed(2)} L
 
 💰 Setoran:
-Cash: ${formatCurrency(cashSetoran)}
-QRIS: ${formatCurrency(qrisSetoran)}
-Total: ${formatCurrency(totalSetoran)}`;
+Cash: ${formatRupiah(cashSetoran)}
+QRIS: ${formatRupiah(qrisSetoran)}
+Total: ${formatRupiah(totalSetoran)}`;
 
       // Tambahkan bagian pengeluaran hanya jika ada data (pu) yang digunakan
       if (validExpenses.length > 0) {
         reportText += `
 
 💸 Pengeluaran (PU):
-${validExpenses.map(item => `- ${item.description}: ${formatCurrency(item.amount)}`).join('\n')}
-Total Pengeluaran: ${formatCurrency(totalExpenses)}`;
+${validExpenses.map(item => `- ${item.description}: ${formatRupiah(item.amount)}`).join('\n')}
+Total Pengeluaran: ${formatRupiah(totalExpenses)}`;
       }
 
       // Tambahkan bagian pemasukan hanya jika ada data (pu) yang digunakan
@@ -513,15 +505,15 @@ Total Pengeluaran: ${formatCurrency(totalExpenses)}`;
         reportText += `
 
 💵 Pemasukan (PU):
-${validIncome.map(item => `- ${item.description}: ${formatCurrency(item.amount)}`).join('\n')}
-Total Pemasukan: ${formatCurrency(totalIncome)}`;
+${validIncome.map(item => `- ${item.description}: ${formatRupiah(item.amount)}`).join('\n')}
+Total Pemasukan: ${formatRupiah(totalIncome)}`;
       }
 
       // Total keseluruhan
       reportText += `
 
-💼 Total Keseluruhan: ${formatCurrency(totalKeseluruhan)}
-Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)} - Pengeluaran: ${formatCurrency(totalExpenses)}`;
+💼 Total Keseluruhan: ${formatRupiah(totalKeseluruhan)}
+Cash: ${formatRupiah(cashSetoran)} + Pemasukan: ${formatRupiah(totalIncome)} - Pengeluaran: ${formatRupiah(totalExpenses)}`;
 
       reportText = reportText.trim();
 
@@ -953,7 +945,7 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
             </div>
             <div className="text-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg mt-4">
               <Label className="text-lg font-semibold">
-                Total Pengeluaran: {formatCurrency(totalExpenses)}
+                Total Pengeluaran: {formatRupiah(totalExpenses)}
               </Label>
             </div>
           </CardContent>
@@ -1019,7 +1011,7 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
             </div>
             <div className="text-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg mt-4">
               <Label className="text-lg font-semibold">
-                Total Pemasukan: {formatCurrency(totalIncome)}
+                Total Pemasukan: {formatRupiah(totalIncome)}
               </Label>
             </div>
           </CardContent>
@@ -1030,10 +1022,10 @@ Cash: ${formatCurrency(cashSetoran)} + Pemasukan: ${formatCurrency(totalIncome)}
           <CardContent className="pt-6">
             <div className="text-center space-y-2">
               <Label className="text-xl font-bold flex items-center justify-center gap-2">
-                💼 Total Keseluruhan: {formatCurrency(totalKeseluruhan)}
+                💼 Total Keseluruhan: {formatRupiah(totalKeseluruhan)}
               </Label>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Cash: {formatCurrency(cashSetoran)} + Pemasukan: {formatCurrency(totalIncome)} - Pengeluaran: {formatCurrency(totalExpenses)}
+                Cash: {formatRupiah(cashSetoran)} + Pemasukan: {formatRupiah(totalIncome)} - Pengeluaran: {formatRupiah(totalExpenses)}
               </p>
             </div>
           </CardContent>
