@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "python-3.11", "web"]
+modules = ["nodejs-20", "python-3.11", "web", "python3"]
 run = "npm run dev"
 hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
 
@@ -14,10 +14,6 @@ run = ["npm", "run", "start"]
 [[ports]]
 localPort = 5000
 externalPort = 80
-
-[[ports]]
-localPort = 8000
-externalPort = 8000
 
 [[ports]]
 localPort = 39043
@@ -42,6 +38,10 @@ externalPort = 3002
 [[ports]]
 localPort = 45655
 externalPort = 3001
+
+[[ports]]
+localPort = 8000
+externalPort = 8000
 
 [env]
 PORT = "5000"
@@ -82,10 +82,10 @@ waitForPort = 5000
 name = "Python API Backend"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python run_python_api.py"
-waitForPort = 8000
-
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "source .pythonlibs/bin/activate && python run_python_api.py"
+waitForPort = 8000
